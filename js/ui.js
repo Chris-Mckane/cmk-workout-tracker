@@ -1,0 +1,134 @@
+// Shared components and helpers used by every screen.
+
+export const esc = text => String(text).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+export const num = value => Math.max(0, parseFloat(value) || 0);
+export const fmtNum = n => (Math.round(n * 10) / 10).toLocaleString('en-GB');
+
+export function setText(el, text) {
+  if (el.textContent !== text) el.textContent = text;
+}
+
+export const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+const VIBRATION = { tap: 10, long: 40, done: [200, 100, 200] };
+export function haptic(type = 'tap') {
+  // Chrome blocks vibration, and logs an error, until the first real tap.
+  if (navigator.userActivation?.hasBeenActive === false) return;
+  navigator.vibrate?.(VIBRATION[type]);
+}
+
+export const go = (tab, detail = {}) => document.dispatchEvent(new CustomEvent('go', { detail: { ...detail, tab } }));
+
+// Tapping the lit option clears it; tapping another switches to it.
+export const toggleValue = (current, tapped) => (current === tapped ? null : tapped);
+
+// --- Faces (workout vibe and nutrition share this) ---
+
+const MOUTHS = { bad: 'M8.5 16.5q3.5-3 7 0', ok: 'M8.5 15.5h7', great: 'M8.5 14.5q3.5 3 7 0' };
+
+export function facesHtml(value, labels) {
+  const face = ([key, mouth]) => `<button class="face ${key}${value === key ? ' on' : ''}" data-face="${key}" aria-label="${labels[key]}" aria-pressed="${value === key}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle class="eye" cx="8.5" cy="9.5" r="1.2"/><circle class="eye" cx="15.5" cy="9.5" r="1.2"/><path d="${mouth}"/></svg></button>`;
+  return `<div class="faces">${Object.entries(MOUTHS).map(face).join('')}</div>
+    <p class="muted small face-label">${value ? labels[value] : ''}</p>`;
+}
+
+// --- Personal best stars ---
+
+const PB_NAMES = { kg: 'Kg', reps: 'Reps', km: 'Distance' };
+const PB_UNITS = { kg: ' kg', reps: '', km: ' km' };
+const LEGEND = `<p class="legend muted">Personal Bests: <span class="star kg">★</span> kg <span class="star reps">★</span> reps <span class="star km">★</span> distance</p>`;
+
+export const pbLabel = pb => `${PB_NAMES[pb.type]} Personal Best: ${fmtNum(pb.value)}${PB_UNITS[pb.type]} (was ${fmtNum(pb.was)})`;
+
+export const starsHtml = pbs => pbs.map(pb => {
+  const label = esc(pbLabel(pb));
+  return `<button class="star ${pb.type}" data-tip="${label}" aria-label="${label}">★</button>`;
+}).join('');
+
+// Keeps one tiny legend under the first star on screen (after its [data-legend] row).
+export function placeLegend(root) {
+  const holder = root.querySelector('button.star')?.closest('[data-legend]');
+  const old = root.querySelector('.legend');
+  if (old && old.previousElementSibling === holder) return;
+  old?.remove();
+  holder?.insertAdjacentHTML('afterend', LEGEND);
+}
+
+let tipTimer;
+export function tip(text) {
+  const el = document.getElementById('tip');
+  el.textContent = text;
+  el.hidden = false;
+  clearTimeout(tipTimer);
+  tipTimer = setTimeout(() => { el.hidden = true; }, 2500);
+}
+
+// --- Tap vs long press ---
+
+// Pointer-based so a scroll (movement over 10px, or the browser taking over the gesture)
+// never counts as a tap, and a long press never also fires a tap.
+export function onPress(root, selector, { tap, long }) {
+  let press = null;
+  const cancel = () => {
+    clearTimeout(press?.timer);
+    press = null;
+  };
+  root.addEventListener('pointerdown', e => {
+    cancel();
+    const el = e.target.closest(selector);
+    if (!el || !e.isPrimary) return;
+    const timer = setTimeout(() => {
+      press = null;
+      long(el);
+    }, 500);
+    press = { el, x: e.clientX, y: e.clientY, timer };
+  });
+  root.addEventListener('pointermove', e => {
+    if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) cancel();
+  });
+  root.addEventListener('pointerup', e => {
+    const el = press?.el;
+    cancel();
+    if (el && el === e.target.closest(selector)) tap(el);
+  });
+  root.addEventListener('pointercancel', cancel);
+  root.addEventListener('pointerleave', cancel);
+  root.addEventListener('contextmenu', e => {
+    if (e.target.closest(selector)) e.preventDefault();
+  });
+  // Keyboard activation arrives as a click with no pointer behind it.
+  root.addEventListener('click', e => {
+    const el = e.detail === 0 && e.target.closest(selector);
+    if (el) tap(el);
+  });
+}
+
+// --- Modal sheet and confirm ---
+
+export function openSheet(html) {
+  const dialog = document.createElement('dialog');
+  dialog.innerHTML = `<div class="sheet">${html}</div>`;
+  document.body.append(dialog);
+  dialog.addEventListener('close', () => dialog.remove());
+  dialog.addEventListener('click', e => {
+    if (e.target === dialog || e.target.closest('[data-close]')) dialog.close();
+  });
+  dialog.showModal();
+  return dialog;
+}
+
+export function ask(message, okLabel = 'OK') {
+  return new Promise(resolve => {
+    const dialog = openSheet(`<p>${esc(message)}</p>
+      <div class="row end"><button class="ghost" data-close>Cancel</button><button class="danger" data-ok>${esc(okLabel)}</button></div>`);
+    dialog.addEventListener('click', e => {
+      if (!e.target.closest('[data-ok]')) return;
+      resolve(true);
+      dialog.close();
+    });
+    // Cancel, backdrop tap, Esc and the Android back button all end up here.
+    dialog.addEventListener('close', () => resolve(false));
+  });
+}

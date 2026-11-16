@@ -1,0 +1,22 @@
+// Cache-first service worker. Bump CACHE whenever any app file changes so phones pick up the new version.
+const CACHE = 'cmk-wt-v1';
+const FILES = [
+  './', 'index.html', 'styles.css', 'manifest.json', 'icon.svg', 'icon-192.png', 'icon-512.png',
+  'js/app.js', 'js/store.js', 'js/time.js', 'js/stats.js', 'js/ui.js', 'js/timers.js',
+  'js/session.js', 'js/workouts.js', 'js/daily.js', 'js/week.js',
+];
+
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(caches.keys()
+    .then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))
+    .then(() => self.clients.claim()));
+});
+
+// Anything not in the cache (tests.html) falls through to the network.
+self.addEventListener('fetch', event => {
+  event.respondWith(caches.match(event.request, { ignoreSearch: true }).then(hit => hit || fetch(event.request)));
+});

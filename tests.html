@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CMK Workout Tracker tests</title>
+  <style>
+    body { margin: 16px; background: #0f1115; color: #e8e8e8; font: 14px/1.5 system-ui, sans-serif; }
+    .pass { color: #22c55e; }
+    .fail { color: #ef4444; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Running...</h1>
+  <ol id="results"></ol>
+  <script type="module">
+    import * as T from './js/time.js';
+    import { measure, pbsOf, buildHistory, sessionSummary, dayType, weekStats } from './js/stats.js';
+    import { migrate, defaultState, VERSION } from './js/store.js';
+    import { toggleValue } from './js/ui.js';
+
+    let failed = 0, total = 0;
+    function eq(actual, expected, name) {
+      const a = JSON.stringify(actual), e = JSON.stringify(expected);
+      const ok = a === e;
+      total++;
+      if (!ok) failed++;
+      const li = document.createElement('li');
+      li.className = ok ? 'pass' : 'fail';
+      li.textContent = ok ? name : `${name}: expected ${e}, got ${a}`;
+      document.getElementById('results').append(li);
+    }
+    const throws = (fn, name) => {
+      let threw = false;
+      try { fn(); } catch { threw = true; }
+      eq(threw, true, name);
+    };
+
+    // --- Local dates ---
+    eq(T.localDate(new Date(2026, 10, 16, 0, 30)), '2026-11-16', 'a 00:30 log lands on today, not yesterday');
+    eq(T.localDate(new Date(2026, 10, 16, 23, 59)), '2026-11-16', '23:59 stays on the same local date');
+    eq(T.localDate(new Date(2026, 0, 5)), '2026-01-05', 'month and day are zero padded');
+    eq(T.dateOfIso(T.fromInput('2026-11-16T00:30')), '2026-11-16', 'ISO datetime maps back to its local date');
+    eq(T.toInput(T.fromInput('2026-11-16T06:45')), '2026-11-16T06:45', 'datetime-local value round-trips');
+    eq(T.addDays('2026-11-30', 1), '2026-12-01', 'addDays crosses a month');
+    eq(T.addDays('2026-01-01', -1), '2025-12-31', 'addDays crosses a year backwards');
+    eq(T.addDays('2026-03-29', 1), '2026-03-30', 'addDays is safe across a clock change');
+    eq(T.fmtDay('2026-11-16', true), 'Mon 16 Nov 2026', 'fmtDay with year');
+
+    // --- Mon-Sun week bounds ---
+    eq(T.weekStart('2026-11-16'), '2026-11-16', 'Monday starts its own week');
+    eq(T.weekStart('2026-11-22'), '2026-11-16', 'Sunday belongs to the week that began on Monday');
+    eq(T.weekStart('2026-11-19'), '2026-11-16', 'midweek maps to Monday');
+    eq(T.weekStart('2027-01-01'), '2026-12-28', 'week start can fall in the previous year');
+    eq(T.weekDates('2026-11-16'), ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20', '2026-11-21', '2026-11-22'], 'weekDates lists Mon to Sun');
+    eq(T.weekLabel('2026-11-16'), '16 to 22 Nov 2026', 'week label within a month');
+    eq(T.weekLabel('2026-11-30'), '30 Nov to 6 Dec 2026', 'week label across months');
+    eq(T.weekLabel('2026-12-28'), '28 Dec 2026 to 3 Jan 2027', 'week label across years');
+
+    // --- Durations ---
+    const iso = T.fromInput;
+    eq(T.fmtHM(T.secondsBetween(iso('2026-11-15T23:30'), iso('2026-11-16T06:45'))), '7h 15m', 'sleep 23:30 to 06:45 is 7h 15m');
+    eq(T.fmtHM(T.secondsBetween(iso('2026-11-15T20:00'), iso('2026-11-16T12:00'))), '16h 0m', 'fast from yesterday to today totals 16h');
+    eq(T.secondsBetween(iso('2026-11-16T08:00'), iso('2026-11-16T07:00')), 0, 'a negative span clamps to 0');
+    eq(T.fmtClock(65), '01:05', 'fmtClock pads');
+    eq(T.fmtClock(3725), '62:05', 'fmtClock keeps counting minutes past the hour');
+    eq(T.elapsedSec({ timerAccumSec: 100, timerStartedAt: null }, 5000), 100, 'paused timer shows accumulated time');
+    eq(T.elapsedSec({ timerAccumSec: 100, timerStartedAt: 1000 }, 301000), 400, 'running timer adds time since its start stamp');
+    eq(T.restLeftSec(90500, 500), 90, 'rest countdown from its end stamp');
+    eq(T.restLeftSec(1000, 5000), 0, 'finished rest never goes negative');
+    eq(T.restLeftSec(null, 5000), 0, 'no rest timer set');
+    eq(T.daysSince(null) === Infinity, true, 'never exported counts as infinitely old');
+    eq(T.daysSince(new Date(0).toISOString(), 15 * 86400000), 15, 'daysSince counts whole days');
+
+    // --- Totals and volume ---
+    const strength = (exerciseId, kg, reps) => ({ exerciseId, kg, reps });
+    const cardio = (exerciseId, minutes, km = null) => ({ exerciseId, minutes, km });
+    const session = (id, date, entries, extra = {}) => ({ id, date, workoutId: null, title: 'Session', vibe: null, note: '', durationSec: 0, entries, ...extra });
+    eq(measure(strength('sq', 60, [10, 10, 0, 8])), { kg: 60, sets: 3, reps: 28, volume: 1680 }, 'a set counts only if reps > 0; volume = reps x kg');
+    eq(measure(strength('sq', 62.5, [4])).volume, 250, 'volume handles half kilos');
+    eq(measure(cardio('run', 30)), { minutes: 30, km: 0 }, 'cardio with no distance');
+
+    // --- PB rules ---
+    const pbTypes = (sessions, sessionId, exerciseId) => buildHistory(sessions).get(sessionId).get(exerciseId).pbs.map(p => p.type);
+    const first = session('a', '2026-11-09', [strength('sq', 60, [10, 10, 10, 10])]);
+    eq(pbTypes([first], 'a', 'sq'), [], 'no stars on the first ever log');
+    eq(pbTypes([first, session('b', '2026-11-11', [strength('sq', 65, [11, 10, 10, 10])])], 'b', 'sq'), ['kg', 'reps'], 'beating kg and total reps earns gold and blue');
+    eq(pbTypes([first, session('b', '2026-11-11', [strength('sq', 60, [10, 10, 10, 10])])], 'b', 'sq'), [], 'ties earn nothing');
+    eq(pbTypes([first, session('b', '2026-11-11', [strength('sq', 65, [10, 10, 10, 10])])], 'b', 'sq'), ['kg'], 'equal reps: gold only, no blue');
+    eq(pbTypes([first, session('b', '2026-11-11', [strength('sq', 70, [0, 0, 0, 0])])], 'b', 'sq'), [], 'kg PB needs at least one completed set');
+    eq(pbTypes([session('z', '2026-11-08', [strength('sq', 0, [0, 0])]), first], 'a', 'sq'), [], 'an empty earlier entry is not a first log');
+    eq(pbTypes([session('b', '2026-11-11', [strength('sq', 65, [11, 10, 10, 10])]), first], 'b', 'sq'), ['kg', 'reps'], 'history runs in date order, not creation order');
+    eq(pbTypes([first, session('b', '2026-11-11', [strength('sq', 65, [12, 12, 12, 12])]), session('c', '2026-11-13', [strength('sq', 62, [11, 11, 11, 11])])], 'c', 'sq'), [], 'must beat every previous session, not just the last');
+    const runs = [session('a', '2026-11-09', [cardio('run', 30, 5)]), session('b', '2026-11-11', [cardio('run', 25, 5.2)]), session('c', '2026-11-12', [cardio('run', 40, 5.2)])];
+    eq(pbTypes(runs, 'b', 'run'), ['km'], 'longer distance earns purple');
+    eq(pbTypes(runs, 'c', 'run'), [], 'equal distance earns nothing');
+    eq(pbsOf({ kg: 65, sets: 4, reps: 52 }, { kg: 60, reps: 48, km: 0 }), [{ type: 'kg', value: 65, was: 60 }, { type: 'reps', value: 52, was: 48 }], 'PB carries the new and previous values');
+    const hist = buildHistory([first, session('b', '2026-11-11', [strength('sq', 65, [10, 10])])]);
+    eq(hist.get('b').get('sq').last, { kg: 60, sets: 4, reps: 40, volume: 2400 }, 'last time comes from the previous log');
+    eq(sessionSummary(hist.get('a')), { sets: 4, reps: 40 }, 'session summary sums sets and reps');
+
+    // --- Week stats ---
+    const state = {
+      ...defaultState(),
+      exercises: [{ id: 'sq', name: 'Squats', type: 'strength', defaultSets: 4, archived: false }, { id: 'run', name: 'Run', type: 'cardio', defaultSets: 4, archived: false }],
+      workouts: [{ id: 'leg', name: 'Leg Day', exerciseIds: ['sq'], archived: false }],
+      sessions: [
+        session('early', '2026-11-15', [strength('sq', 50, [5, 5])], { workoutId: 'leg' }),
+        session('mon', '2026-11-16', [strength('sq', 60, [10, 10, 10, 0]), cardio('run', 0)], { workoutId: 'leg', durationSec: 1800, vibe: 'ok' }),
+        session('sun', '2026-11-22', [strength('sq', 65, [10, 10, 10, 10]), cardio('run', 20, 3)], { workoutId: 'leg', durationSec: 2400, vibe: 'great' }),
+        session('late', '2026-11-23', [strength('sq', 100, [1])], { workoutId: 'leg' }),
+      ],
+      days: { '2026-11-18': { type: 'rest', nutrition: 'great' }, '2026-11-22': { type: 'rest', nutrition: null } },
+      sleep: [{ id: 's1', bed: iso('2026-11-15T23:00'), wake: iso('2026-11-16T07:00') }, { id: 's2', bed: iso('2026-11-16T23:00'), wake: iso('2026-11-17T05:00') }, { id: 's3', bed: iso('2026-11-22T23:00'), wake: iso('2026-11-23T07:00') }],
+      fasts: [{ id: 'f1', start: iso('2026-11-15T20:00'), end: iso('2026-11-16T12:00') }, { id: 'f2', start: iso('2026-11-17T20:00'), end: iso('2026-11-18T10:00') }, { id: 'f3', start: iso('2026-11-22T20:00'), end: null }],
+    };
+    const w = weekStats(state, '2026-11-16');
+    eq(w.totals, { sessions: 2, sets: 7, reps: 70, volume: 4400, cardioMin: 20, timeSec: 4200 }, 'week totals include Monday and Sunday, exclude the days either side');
+    eq(w.byWorkout, [{ name: 'Leg Day', sessions: 2, sets: 7, reps: 70 }], 'two Leg Day sessions in one week add together');
+    eq(w.byExercise.map(x => [x.name, x.sets, x.reps, x.topKg, x.volume, x.minutes, x.km]), [['Squats', 7, 70, 65, 4400, 0, 0], ['Run', 0, 0, 0, 0, 20, 3]], 'by exercise: sets, reps, top kg, volume; cardio minutes and km; untouched entries are left out');
+    eq(w.pbs.map(p => p.type), ['kg', 'reps', 'kg', 'reps'], 'PBs earned this week are counted');
+    eq(w.vibes, ['ok', 'great'], 'one vibe per session, in date order');
+    eq(w.days.map(d => d.type), ['workout', null, 'rest', null, null, null, 'rest'], 'day strip: derived workout, stored rest, override beats a session');
+    eq(w.days[2].nutrition, 'great', 'nutrition colour shows on its day');
+    eq([w.workoutDays, w.restDays], [1, 2], 'workout vs rest day counts');
+    eq([w.sleep.nights, T.fmtHM(w.sleep.totalSec), T.fmtHM(w.sleep.avgSec)], [2, '14h 0m', '7h 0m'], 'sleep belongs to the wake date; average per night');
+    eq([w.fasts.count, T.fmtHM(w.fasts.totalSec), T.fmtHM(w.fasts.longestSec)], [2, '30h 0m', '16h 0m'], 'fasts count in the week they ended; running fast ignored');
+    eq(weekStats(state, '2026-11-02').totals.sessions, 0, 'an empty week is all zeros');
+    eq(dayType({}, '2026-11-16', true), 'workout', 'a date with a session is a workout day');
+    eq(dayType({}, '2026-11-16', false), null, 'no session and no override: unset');
+    eq(dayType({ '2026-11-16': { type: 'rest' } }, '2026-11-16', true), 'rest', 'the stored override wins');
+
+    // --- One lit face at a time ---
+    eq(toggleValue(null, 'great'), 'great', 'tapping a face lights it');
+    eq(toggleValue('great', 'bad'), 'bad', 'tapping another face switches');
+    eq(toggleValue('great', 'great'), null, 'tapping the lit face clears it');
+
+    // --- migrate() ---
+    eq(migrate({ version: 1 }), defaultState(), 'migrate fills every missing field');
+    eq(migrate({ version: 1, settings: { restSec: 120 } }).settings, { ...defaultState().settings, restSec: 120 }, 'migrate keeps saved settings and adds new defaults');
+    eq(migrate(JSON.parse(JSON.stringify(state))).sessions.length, 4, 'migrate keeps existing data (export then import)');
+    eq(migrate({ version: 1, sessions: [], active: { sessionId: 'gone' } }).active, null, 'an active session that no longer exists is dropped');
+    eq(migrate({ ...state, active: { sessionId: 'mon', timerStartedAt: null, timerAccumSec: 5, restEndsAt: null } }).active.timerAccumSec, 5, 'a valid active session survives');
+    throws(() => migrate(null), 'migrate rejects null');
+    throws(() => migrate([1, 2]), 'migrate rejects arrays');
+    throws(() => migrate({ sessions: [] }), 'migrate rejects data with no version');
+    throws(() => migrate({ version: VERSION + 1 }), 'migrate rejects data from a newer app version');
+    throws(() => migrate({ version: 1, sessions: 'nope' }), 'migrate rejects damaged lists');
+
+    document.getElementById('summary').textContent = failed ? `FAIL: ${failed} of ${total} failed` : `PASS: all ${total} tests passed`;
+    document.getElementById('summary').className = failed ? 'fail' : 'pass';
+    document.title = failed ? 'FAIL' : 'PASS';
+  </script>
+</body>
+</html>
