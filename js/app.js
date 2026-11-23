@@ -1,14 +1,14 @@
 // App shell: boot, bottom nav, the display ticker, and app-wide tap behaviour.
 
 import { state, load, save, flush } from './store.js';
-import { haptic, tip, isIOS } from './ui.js';
+import { haptic, tip, isIOS, filterSections } from './ui.js';
 import { checkRest, unlockAudio, syncWakeLock } from './timers.js';
 import * as session from './session.js';
 import * as workouts from './workouts.js';
 import * as daily from './daily.js';
-import * as week from './week.js';
+import * as summary from './summary.js';
 
-const screens = { session, workouts, daily, week };
+const screens = { session, workouts, daily, summary };
 const tabs = [...document.querySelectorAll('nav button')];
 let current;
 
@@ -50,6 +50,9 @@ document.addEventListener('click', e => {
   // Set circles do their own haptics (tap vs long press).
   const btn = e.target.closest('button, summary, input[type="checkbox"]');
   if (btn && !btn.classList.contains('circle')) haptic(btn.dataset.haptic);
+});
+document.addEventListener('input', e => {
+  if (e.target.matches('[data-search]')) filterSections(e.target);
 });
 document.querySelector('nav').addEventListener('click', e => {
   const tab = e.target.closest('button')?.dataset.tab;

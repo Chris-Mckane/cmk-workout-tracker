@@ -2,12 +2,15 @@
 
 import { state, save, uid } from './store.js';
 import { today, fmtDay, fmtClock, elapsedSec } from './time.js';
-import { buildHistory, measure, pbsOf, isStrength, sessionSummary } from './stats.js';
-import { esc, num, fmtNum, setText, facesHtml, toggleValue, starsHtml, placeLegend, onPress, openSheet, ask, haptic } from './ui.js';
+import { buildHistory, measure, pbsOf, isStrength, sessionSummary, groupBySection, doneNames } from './stats.js';
+import { esc, sectionsHtml, num, tip, fmtNum, setText, facesHtml, toggleValue, starsHtml, placeLegend, onPress, openSheet, ask, haptic } from './ui.js';
 import * as timers from './timers.js';
 
-const VIBES = { bad: 'Not the best workout', ok: 'Not bad, could be better', great: 'Great workout' };
+const VIBES = { bad: 'Better than nothing', ok: 'Could be better', great: 'Great workout', exceptional: 'Exceptional workout' };
 const MAX_SETS = 6;
+const EFFORTS = [null, 'warmup', 'maintenance', 'fatigue', 'failure'];
+const EFFORT_NAMES = { warmup: 'Warm up', maintenance: 'Maintenance', fatigue: 'Fatigue (a couple left in the tank)', failure: 'Failure (could not do another rep)' };
+const EFFORT_LETTERS = { warmup: 'W', maintenance: 'M', fatigue: 'F', failure: 'X' };
 
 let root;
 let history;            // rebuilt on every full render, reused by taps in between
@@ -24,7 +27,7 @@ const livePbs = (session, entry) => pbsOf(measure(entry), history.get(session.id
 
 const newEntry = ex => (ex.type === 'cardio'
   ? { exerciseId: ex.id, minutes: 0, km: null }
-  : { exerciseId: ex.id, kg: 0, reps: Array(ex.defaultSets).fill(0) });
+  : { exerciseId: ex.id, kg: 0, reps: Array(ex.defaultSets).fill(0), effort: Array(ex.defaultSets).fill(null) });
 
 // New strength entries start at the kg used last time for that exercise.
 function prefillKg(session, entries) {
@@ -45,8 +48,9 @@ export function startSession(workoutId, date = today()) {
   };
   state.sessions.push(session);
   prefillKg(session, session.entries);
-  state.active = { sessionId: session.id, timerStartedAt: null, timerAccumSec: 0, restEndsAt: null };
+  state.active = { sessionId: session.id, timerStartedAt: Date.now(), timerAccumSec: 0, restEndsAt: null };
   save();
+  timers.syncWakeLock();
   return session;
 }
 
@@ -65,13 +69,20 @@ function headerHtml(session) {
     <div class="rest" id="rest" hidden>
       ${timers.REST_PRESETS.map(preset).join('')}
       <b class="grow" id="rest-left" role="status"></b>
-      <label><input type="checkbox" data-field="autoRest"${state.settings.autoRest ? ' checked' : ''}> Auto-start after a set</label>
     </div>
   </header>`;
 }
 
-const circlesHtml = entry => entry.reps.map((n, i) =>
-  `<button class="circle${n ? ' on' : ''}" data-i="${i}" aria-label="Set ${i + 1}: ${n} reps">${n || ''}</button>`).join('');
+const effortLabel = (effort, i) => `Set ${i + 1} effort: ${EFFORT_NAMES[effort] ?? 'not set'}`;
+
+// Each set is a rep circle with its effort button underneath.
+const setsHtml = entry => entry.reps.map((n, i) => {
+  const effort = entry.effort[i];
+  return `<div class="set">
+    <button class="circle${n ? ' on' : ''}" data-i="${i}" aria-label="Set ${i + 1}: ${n} reps">${n || ''}</button>
+    <button class="effort ${effort ?? ''}" data-act="effort" data-i="${i}" aria-label="${effortLabel(effort, i)}">${EFFORT_LETTERS[effort] ?? '–'}</button>
+  </div>`;
+}).join('');
 
 function entryHtml(session, entry) {
   const name = esc(exercises.get(entry.exerciseId)?.name ?? 'Deleted exercise');
@@ -92,7 +103,8 @@ function entryHtml(session, entry) {
     <div class="row" data-legend><h3 class="grow">${name} ${stars}</h3>
       <label><input class="num" data-field="kg" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" value="${entry.kg || ''}" aria-label="${name} weight in kg"> kg</label></div>
     ${last ? `<p class="muted small">last time: ${last.sets} sets, ${last.reps} reps @ ${fmtNum(last.kg)} kg</p>` : ''}
-    <div class="row"><div class="circles">${circlesHtml(entry)}</div>
+    <p class="muted small">Effort under each set: W warm up · M maintenance · F fatigue · X failure</p>
+    <div class="row"><div class="circles">${setsHtml(entry)}</div>
       <button data-act="minus1" data-haptic="long" aria-label="Remove one rep"${entry.reps.some(Boolean) ? '' : ' disabled'}>−1</button></div>
     <div class="row">
       <button class="ghost" data-act="set-remove" aria-label="Remove a set"${sets > 1 ? '' : ' disabled'}>− set</button>
@@ -131,8 +143,10 @@ function savedHtml(open) {
   const item = s => {
     const { sets, reps } = sessionSummary(history.get(s.id));
     const status = isActive(s) ? 'in progress' : fmtClock(s.durationSec);
-    return `<li data-id="${s.id}"><button class="open" data-act="open">
-        <b>${esc(s.title || 'Session')}</b> <span class="dot ${s.vibe ?? ''}"></span>
+    const done = doneNames(s, new Map([...exercises].map(([id, x]) => [id, x.name])));
+    return `<li class="vibe-line ${s.vibe ?? ''}" data-id="${s.id}"><button class="open" data-act="open">
+        <b>${esc(s.title || 'Session')}</b>
+        ${done.length ? `<span class="small">${esc(done.join(' · '))}</span>` : ''}
         <span class="muted small">${fmtDay(s.date, true)} · ${sets} sets, ${reps} reps · ${status}</span>
         ${s.note ? `<span class="muted small clip">${esc(s.note)}</span>` : ''}
       </button><button class="ghost" data-act="delete" aria-label="Delete session">✕</button></li>`;
@@ -179,7 +193,8 @@ function changeReps(circle, change) {
   circle.setAttribute('aria-label', `Set ${i + 1}: ${now} reps`);
   refreshEntry(card, session, entry);
   save();
-  if (!was && now && state.settings.autoRest && isActive(session)) {
+  // Every added rep (re)starts the rest countdown, so it runs from the last rep of the set.
+  if (now > was && isActive(session)) {
     timers.startRest();
     tick();
   }
@@ -187,10 +202,10 @@ function changeReps(circle, change) {
 
 function pickExercise(session) {
   const used = new Set(session.entries.map(e => e.exerciseId));
-  const options = state.exercises.filter(x => !x.archived && !used.has(x.id)).sort((a, b) => b.type.localeCompare(a.type));
+  const options = state.exercises.filter(x => !x.archived && !used.has(x.id));
   const sheet = openSheet(`<h2>Add exercise</h2>
     ${options.length
-      ? `<div class="stack">${options.map(x => `<button data-id="${x.id}">${esc(x.name)} <span class="muted small">${x.type}</span></button>`).join('')}</div>`
+      ? sectionsHtml(groupBySection(options), items => `<div class="stack">${items.map(x => `<button data-id="${x.id}">${esc(x.name)}</button>`).join('')}</div>`)
       : '<p class="muted">Nothing to add. Create exercises in Workouts > Exercises.</p>'}
     <div class="row end"><button class="ghost" data-close>Close</button></div>`);
   sheet.addEventListener('click', e => {
@@ -273,11 +288,26 @@ async function onClick(e) {
       return;
     case 'set-add':
     case 'set-remove':
-      if (btn.dataset.act === 'set-add') entry.reps.push(0);
-      else entry.reps.pop();
+      if (btn.dataset.act === 'set-add') {
+        entry.reps.push(0);
+        entry.effort.push(null);
+      } else {
+        entry.reps.pop();
+        entry.effort.pop();
+      }
       card.outerHTML = entryHtml(session, entry);
       placeLegend(root);
       return save();
+    case 'effort': {
+      const i = Number(btn.dataset.i);
+      const effort = EFFORTS[(EFFORTS.indexOf(entry.effort[i]) + 1) % EFFORTS.length];
+      entry.effort[i] = effort;
+      btn.className = `effort ${effort ?? ''}`;
+      btn.textContent = EFFORT_LETTERS[effort] ?? '–';
+      btn.setAttribute('aria-label', effortLabel(effort, i));
+      tip(`Set ${i + 1}: ${EFFORT_NAMES[effort] ?? 'no effort set'}`);
+      return save();
+    }
     case 'minus1': {
       const i = entry.reps.findLastIndex(Boolean);
       return changeReps(card.querySelector(`.circle[data-i="${i}"]`), n => n - 1);
@@ -302,10 +332,7 @@ function onInput(e) {
 
 function onChange(e) {
   const field = e.target.dataset.field, session = current();
-  if (field === 'autoRest') {
-    state.settings.autoRest = e.target.checked;
-    save();
-  } else if (field === 'date' && session && e.target.value) {
+  if (field === 'date' && session && e.target.value) {
     session.date = e.target.value;
     save();
     render();

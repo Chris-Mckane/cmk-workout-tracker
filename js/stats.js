@@ -1,8 +1,40 @@
 // Pure derived maths: nothing here is stored, everything is computed from state.
 
-import { weekDates, dateOfIso, secondsBetween } from './time.js';
+import { datesBetween, dateOfIso, secondsBetween } from './time.js';
 
 export const isStrength = entry => Array.isArray(entry.reps);
+
+// Weight sections in body order, top to bottom. Sections the user makes up come next (A to Z),
+// then weight exercises with no section, then all cardio as one section.
+const BODY_SECTIONS = ['Chest', 'Back', 'Shoulders', 'Arms', 'Core', 'Legs'];
+const OTHER = 'Other', CARDIO = 'Cardio';
+const sectionOf = x => (x.type === 'cardio' ? CARDIO : x.section?.trim() || OTHER);
+const rank = section => {
+  const body = BODY_SECTIONS.indexOf(section);
+  if (body >= 0) return body;
+  return BODY_SECTIONS.length + (section === OTHER) + 2 * (section === CARDIO);
+};
+
+// Exercises grouped by section, keeping the order they were added within each section.
+export function groupBySection(exercises) {
+  const groups = new Map();
+  for (const x of exercises) groups.set(sectionOf(x), [...(groups.get(sectionOf(x)) ?? []), x]);
+  return [...groups]
+    .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+    .map(([section, items]) => ({ section, items }));
+}
+
+// Weight section names: the body sections, then any the user has made up.
+export const sectionNames = exercises => [...new Set([
+  ...BODY_SECTIONS,
+  ...exercises.filter(x => x.type !== 'cardio').map(x => x.section?.trim()).filter(Boolean).sort(),
+])];
+
+// Reuses a known section's spelling when only the case differs ("chest" -> "Chest").
+export function matchSection(typed, exercises) {
+  const name = typed.trim();
+  return sectionNames(exercises).find(s => s.toLowerCase() === name.toLowerCase()) ?? name;
+}
 
 // The numbers one session entry contributes. A set counts if reps > 0.
 export function measure(entry) {
@@ -12,6 +44,11 @@ export function measure(entry) {
 }
 
 const isLogged = m => m.reps > 0 || m.minutes > 0 || m.km > 0;
+
+// Names of the exercises actually done in a session (weights and cardio), in session order.
+export const doneNames = (session, names) => session.entries
+  .filter(e => isLogged(measure(e)))
+  .map(e => names.get(e.exerciseId) ?? 'Deleted exercise');
 
 // PBs for a measure against the best of all earlier logs. `best` is null on the first
 // ever log (no stars); ties do not count.
@@ -59,11 +96,12 @@ export const dayType = (days, date, hasSession) => days[date]?.type ?? (hasSessi
 
 const sum = list => list.reduce((a, b) => a + b, 0);
 
-export function weekStats(state, start, history = buildHistory(state.sessions)) {
-  const dates = weekDates(start);
-  const inWeek = date => date >= start && date <= dates[6];
+// Totals for every date from `from` to `to` (a day, a Mon-Sun week or a month).
+export function periodStats(state, from, to, history = buildHistory(state.sessions)) {
+  const dates = datesBetween(from, to);
+  const inPeriod = date => date >= from && date <= to;
   const names = new Map([...state.exercises, ...state.workouts].map(x => [x.id, x.name]));
-  const sessions = state.sessions.filter(s => inWeek(s.date)).sort((a, b) => a.date.localeCompare(b.date));
+  const sessions = state.sessions.filter(s => inPeriod(s.date)).sort((a, b) => a.date.localeCompare(b.date));
 
   const totals = { sessions: sessions.length, sets: 0, reps: 0, volume: 0, cardioMin: 0, timeSec: 0 };
   const byWorkout = new Map(), byExercise = new Map(), pbs = [];
@@ -103,9 +141,9 @@ export function weekStats(state, start, history = buildHistory(state.sessions)) 
     type: dayType(state.days, date, sessionDates.has(date)),
     nutrition: state.days[date]?.nutrition ?? null,
   }));
-  // Sleep belongs to its wake date; a fast counts in the week it ended.
-  const sleepSecs = state.sleep.filter(x => inWeek(dateOfIso(x.wake))).map(x => secondsBetween(x.bed, x.wake));
-  const fastSecs = state.fasts.filter(f => f.end && inWeek(dateOfIso(f.end))).map(f => secondsBetween(f.start, f.end));
+  // Sleep belongs to its wake date; a fast counts in the period it ended.
+  const sleepSecs = state.sleep.filter(x => inPeriod(dateOfIso(x.wake))).map(x => secondsBetween(x.bed, x.wake));
+  const fastSecs = state.fasts.filter(f => f.end && inPeriod(dateOfIso(f.end))).map(f => secondsBetween(f.start, f.end));
 
   return {
     totals,

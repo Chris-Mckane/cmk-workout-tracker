@@ -15,7 +15,7 @@
   <ol id="results"></ol>
   <script type="module">
     import * as T from './js/time.js';
-    import { measure, pbsOf, buildHistory, sessionSummary, dayType, weekStats } from './js/stats.js';
+    import { measure, pbsOf, buildHistory, sessionSummary, dayType, periodStats, groupBySection, sectionNames, matchSection, doneNames } from './js/stats.js';
     import { migrate, defaultState, VERSION } from './js/store.js';
     import { toggleValue } from './js/ui.js';
 
@@ -52,8 +52,11 @@
     eq(T.weekStart('2026-11-22'), '2026-11-16', 'Sunday belongs to the week that began on Monday');
     eq(T.weekStart('2026-11-19'), '2026-11-16', 'midweek maps to Monday');
     eq(T.weekStart('2027-01-01'), '2026-12-28', 'week start can fall in the previous year');
-    eq(T.weekDates('2026-11-16'), ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20', '2026-11-21', '2026-11-22'], 'weekDates lists Mon to Sun');
     eq(T.weekLabel('2026-11-16'), '16 to 22 Nov 2026', 'week label within a month');
+    eq([T.monthStart('2026-11-23'), T.monthEnd('2026-11-23'), T.monthEnd('2028-02-10')], ['2026-11-01', '2026-11-30', '2028-02-29'], 'month bounds, including a leap February');
+    eq([T.addMonths('2026-12-31', 1), T.addMonths('2026-01-15', -1)], ['2027-01-01', '2025-12-01'], 'addMonths crosses years and never overflows');
+    eq(T.monthLabel('2026-11-23'), 'November 2026', 'month label');
+    eq(T.datesBetween('2026-11-29', '2026-12-02'), ['2026-11-29', '2026-11-30', '2026-12-01', '2026-12-02'], 'datesBetween includes both ends');
     eq(T.weekLabel('2026-11-30'), '30 Nov to 6 Dec 2026', 'week label across months');
     eq(T.weekLabel('2026-12-28'), '28 Dec 2026 to 3 Jan 2027', 'week label across years');
 
@@ -98,6 +101,8 @@
     const hist = buildHistory([first, session('b', '2026-11-11', [strength('sq', 65, [10, 10])])]);
     eq(hist.get('b').get('sq').last, { kg: 60, sets: 4, reps: 40, volume: 2400 }, 'last time comes from the previous log');
     eq(sessionSummary(hist.get('a')), { sets: 4, reps: 40 }, 'session summary sums sets and reps');
+    const mixed = session('m', '2026-11-23', [strength('row', 50, [8, 8]), strength('curl', 10, [0, 0]), cardio('xt', 20), cardio('bike', 0)]);
+    eq(doneNames(mixed, new Map([['row', 'Row'], ['xt', 'Cross trainer']])), ['Row', 'Cross trainer'], 'a session lists every exercise done, weights and cardio, skipping untouched ones');
 
     // --- Week stats ---
     const state = {
@@ -114,7 +119,7 @@
       sleep: [{ id: 's1', bed: iso('2026-11-15T23:00'), wake: iso('2026-11-16T07:00') }, { id: 's2', bed: iso('2026-11-16T23:00'), wake: iso('2026-11-17T05:00') }, { id: 's3', bed: iso('2026-11-22T23:00'), wake: iso('2026-11-23T07:00') }],
       fasts: [{ id: 'f1', start: iso('2026-11-15T20:00'), end: iso('2026-11-16T12:00') }, { id: 'f2', start: iso('2026-11-17T20:00'), end: iso('2026-11-18T10:00') }, { id: 'f3', start: iso('2026-11-22T20:00'), end: null }],
     };
-    const w = weekStats(state, '2026-11-16');
+    const w = periodStats(state, '2026-11-16', '2026-11-22');
     eq(w.totals, { sessions: 2, sets: 7, reps: 70, volume: 4400, cardioMin: 20, timeSec: 4200 }, 'week totals include Monday and Sunday, exclude the days either side');
     eq(w.byWorkout, [{ name: 'Leg Day', sessions: 2, sets: 7, reps: 70 }], 'two Leg Day sessions in one week add together');
     eq(w.byExercise.map(x => [x.name, x.sets, x.reps, x.topKg, x.volume, x.minutes, x.km]), [['Squats', 7, 70, 65, 4400, 0, 0], ['Run', 0, 0, 0, 0, 20, 3]], 'by exercise: sets, reps, top kg, volume; cardio minutes and km; untouched entries are left out');
@@ -125,7 +130,11 @@
     eq([w.workoutDays, w.restDays], [1, 2], 'workout vs rest day counts');
     eq([w.sleep.nights, T.fmtHM(w.sleep.totalSec), T.fmtHM(w.sleep.avgSec)], [2, '14h 0m', '7h 0m'], 'sleep belongs to the wake date; average per night');
     eq([w.fasts.count, T.fmtHM(w.fasts.totalSec), T.fmtHM(w.fasts.longestSec)], [2, '30h 0m', '16h 0m'], 'fasts count in the week they ended; running fast ignored');
-    eq(weekStats(state, '2026-11-02').totals.sessions, 0, 'an empty week is all zeros');
+    eq(periodStats(state, '2026-11-02', '2026-11-08').totals.sessions, 0, 'an empty week is all zeros');
+    const day = periodStats(state, '2026-11-22', '2026-11-22');
+    eq([day.totals.sessions, day.totals.reps, day.days.length, day.days[0].type], [1, 40, 1, 'rest'], 'a one-day summary covers just that date');
+    const month = periodStats(state, '2026-11-01', '2026-11-30');
+    eq([month.totals.sessions, month.days.length, month.fasts.count], [4, 30, 2], 'a month summary covers every date in it');
     eq(dayType({}, '2026-11-16', true), 'workout', 'a date with a session is a workout day');
     eq(dayType({}, '2026-11-16', false), null, 'no session and no override: unset');
     eq(dayType({ '2026-11-16': { type: 'rest' } }, '2026-11-16', true), 'rest', 'the stored override wins');
@@ -135,8 +144,24 @@
     eq(toggleValue('great', 'bad'), 'bad', 'tapping another face switches');
     eq(toggleValue('great', 'great'), null, 'tapping the lit face clears it');
 
+    // --- Exercise sections ---
+    const ex = (name, section) => ({ id: name, name, type: 'strength', section, defaultSets: 4, archived: false });
+    const run = { id: 'Run', name: 'Run', type: 'cardio', section: 'Legs', defaultSets: 4, archived: false };
+    const lib = [ex('Squat', 'Legs'), run, ex('Plank', ''), ex('Chest fly', 'Chest'), ex('Curl', 'Biceps'), ex('Bench press', 'Chest'), ex('Old', undefined), ex('Row', 'Back')];
+    eq(groupBySection(lib).map(g => [g.section, g.items.map(x => x.name)]), [['Chest', ['Chest fly', 'Bench press']], ['Back', ['Row']], ['Legs', ['Squat']], ['Biceps', ['Curl']], ['Other', ['Plank', 'Old']], ['Cardio', ['Run']]], 'body order, then made-up sections, then Other, then all cardio; added order kept');
+    eq(sectionNames(lib), ['Chest', 'Back', 'Shoulders', 'Arms', 'Core', 'Legs', 'Biceps'], 'section suggestions: body order, then made-up ones, never Cardio');
+    eq(matchSection('  chest ', lib), 'Chest', 'typed section reuses the existing spelling');
+    eq(matchSection('legs', []), 'Legs', 'a starter section is matched even before it is used');
+    eq(matchSection('Glutes', lib), 'Glutes', 'a new section is kept as typed');
+
     // --- migrate() ---
     eq(migrate({ version: 1 }), defaultState(), 'migrate fills every missing field');
+    eq(migrate({ version: 1, exercises: [{ id: 'a', name: 'Squat', type: 'strength', defaultSets: 4, archived: false }] }).exercises[0].section, '', 'v1 exercises gain an empty section');
+    eq(migrate({ version: 2, exercises: [ex('Squat', 'Legs')] }).exercises[0].section, 'Legs', 'v2 sections are kept');
+    const v2 = migrate({ version: 2, settings: { autoRest: true }, sessions: [session('x', '2026-11-20', [strength('sq', 60, [10, 8]), cardio('run', 20)])] });
+    eq(v2.sessions[0].entries.map(e => e.effort ?? 'none'), [[null, null], 'none'], 'v2 weight sets gain an empty effort per set; cardio untouched');
+    eq('autoRest' in v2.settings, false, 'the old auto-rest setting is dropped');
+    eq(migrate({ version: 3, sessions: [session('x', '2026-11-20', [{ exerciseId: 'sq', kg: 60, reps: [10], effort: ['failure'] }])] }).sessions[0].entries[0].effort, ['failure'], 'saved effort is kept');
     eq(migrate({ version: 1, settings: { restSec: 120 } }).settings, { ...defaultState().settings, restSec: 120 }, 'migrate keeps saved settings and adds new defaults');
     eq(migrate(JSON.parse(JSON.stringify(state))).sessions.length, 4, 'migrate keeps existing data (export then import)');
     eq(migrate({ version: 1, sessions: [], active: { sessionId: 'gone' } }).active, null, 'an active session that no longer exists is dropped');

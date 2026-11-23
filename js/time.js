@@ -1,6 +1,7 @@
 // All date, duration and timer maths. Dates are local "YYYY-MM-DD" strings (never UTC);
 // datetimes are ISO strings; timer stamps are epoch milliseconds.
 
+const FULL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DAY_MS = 86400000;
@@ -22,7 +23,27 @@ export function addDays(date, n) {
 
 // Weeks run Monday to Sunday.
 export const weekStart = date => addDays(date, -((parseDate(date).getDay() + 6) % 7));
-export const weekDates = start => Array.from({ length: 7 }, (_, i) => addDays(start, i));
+
+// Every date from `from` to `to`, both included.
+export function datesBetween(from, to) {
+  const dates = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) dates.push(d);
+  return dates;
+}
+
+export const monthStart = date => `${date.slice(0, 8)}01`;
+export function monthEnd(date) {
+  const d = parseDate(date);
+  return localDate(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+}
+export function addMonths(date, n) {
+  const d = parseDate(date);
+  return localDate(new Date(d.getFullYear(), d.getMonth() + n, 1));
+}
+export function monthLabel(date) {
+  const d = parseDate(date);
+  return `${FULL_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
 
 export function weekLabel(start) {
   const a = parseDate(start), b = parseDate(addDays(start, 6));

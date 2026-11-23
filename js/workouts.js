@@ -1,7 +1,8 @@
 // Workouts screen: workout templates, with an Exercises sub-tab for the library.
 
 import { state, save, uid } from './store.js';
-import { esc, openSheet, ask, tip, go } from './ui.js';
+import { esc, sectionsHtml, openSheet, ask, tip, go } from './ui.js';
+import { groupBySection, sectionNames, matchSection } from './stats.js';
 import { startSession } from './session.js';
 
 let root;
@@ -35,21 +36,21 @@ function draftHtml(names) {
     <ol class="list">${chosen}</ol>
     <div class="card"><h3>Add from library</h3>
       ${options.length
-        ? `<div class="stack">${options.map(x => `<button data-act="add" data-id="${x.id}">+ ${esc(x.name)}</button>`).join('')}</div>`
+        ? sectionsHtml(groupBySection(options), items => `<div class="stack">${items.map(x => `<button data-act="add" data-id="${x.id}">+ ${esc(x.name)}</button>`).join('')}</div>`)
         : '<p class="muted small">Nothing left to add. Create more in the Exercises tab.</p>'}
     </div>
     <div class="row end"><button class="ghost" data-act="cancel">Cancel</button><button class="primary" data-act="save">Save</button></div>`;
 }
 
 function exercisesHtml() {
-  const group = (title, type) => {
-    const items = live(state.exercises).filter(x => x.type === type);
-    const row = x => `<li data-id="${x.id}"><span class="grow">${esc(x.name)}${type === 'strength' ? ` <span class="muted small">${x.defaultSets} sets</span>` : ''}</span>
-      <button class="ghost" data-act="edit-ex">Edit</button>
-      <button class="ghost" data-act="delete-ex" aria-label="Delete ${esc(x.name)}">✕</button></li>`;
-    return `<h2 class="sep">${title}</h2>${items.length ? `<ul class="list">${items.map(row).join('')}</ul>` : '<p class="muted">None yet.</p>'}`;
-  };
-  return `${group('Strength', 'strength')}${group('Cardio', 'cardio')}
+  const row = x => `<li data-id="${x.id}" data-name="${esc(x.name)}"><span class="grow">${esc(x.name)}
+      <span class="muted small">${x.type === 'strength' ? `${x.defaultSets} sets` : 'cardio'}</span></span>
+    <button class="ghost" data-act="edit-ex">Edit</button>
+    <button class="ghost" data-act="delete-ex" aria-label="Delete ${esc(x.name)}">✕</button></li>`;
+  const exercises = live(state.exercises);
+  return `${exercises.length
+      ? sectionsHtml(groupBySection(exercises), items => `<ul class="list">${items.map(row).join('')}</ul>`)
+      : '<p class="muted card">No exercises yet. Add one and give it a section, like Chest or Legs.</p>'}
     <button class="wide sep" data-act="new-ex">+ New exercise</button>`;
 }
 
@@ -66,21 +67,26 @@ function editExercise(ex) {
   const type = ex?.type ?? 'strength';
   const sheet = openSheet(`<h2>${ex ? 'Edit' : 'New'} exercise</h2>
     <label>Name <input name="name" value="${esc(ex?.name ?? '')}" maxlength="40"></label>
+    <label data-section${type === 'cardio' ? ' hidden' : ''}>Section <input name="section" list="section-names" value="${esc(ex?.section ?? '')}" maxlength="30" placeholder="e.g. Chest"></label>
+    <datalist id="section-names">${sectionNames(state.exercises).map(s => `<option value="${esc(s)}">`).join('')}</datalist>
     <label>Type <select name="type"${ex ? ' disabled' : ''}>
       <option value="strength">Strength</option><option value="cardio"${type === 'cardio' ? ' selected' : ''}>Cardio</option></select></label>
     <label data-sets${type === 'cardio' ? ' hidden' : ''}>Default sets <input class="num" name="sets" type="number" inputmode="numeric" min="1" max="6" value="${ex?.defaultSets ?? 4}"></label>
     <div class="row end"><button class="ghost" data-close>Cancel</button><button class="primary" data-save>Save</button></div>`);
   const field = name => sheet.querySelector(`[name="${name}"]`);
   field('type').addEventListener('change', () => {
-    sheet.querySelector('[data-sets]').hidden = field('type').value === 'cardio';
+    const cardio = field('type').value === 'cardio';
+    sheet.querySelector('[data-sets]').hidden = cardio;
+    sheet.querySelector('[data-section]').hidden = cardio;
   });
   sheet.addEventListener('click', e => {
     if (!e.target.closest('[data-save]')) return;
     const name = field('name').value.trim();
     if (!name) return field('name').focus();
     const defaultSets = Math.min(6, Math.max(1, Math.round(field('sets').value) || 4));
-    if (ex) Object.assign(ex, { name, defaultSets });
-    else state.exercises.push({ id: uid(), name, type: field('type').value, defaultSets, archived: false });
+    const section = field('type').value === 'cardio' ? '' : matchSection(field('section').value, state.exercises);
+    if (ex) Object.assign(ex, { name, section, defaultSets });
+    else state.exercises.push({ id: uid(), name, type: field('type').value, section, defaultSets, archived: false });
     save();
     sheet.close();
     render();

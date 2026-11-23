@@ -23,14 +23,49 @@ export const go = (tab, detail = {}) => document.dispatchEvent(new CustomEvent('
 // Tapping the lit option clears it; tapping another switches to it.
 export const toggleValue = (current, tapped) => (current === tapped ? null : tapped);
 
+// A search box, then one heading per exercise section followed by that section's items.
+// Items are the elements carrying data-id; their data-name (or text) is what search matches.
+export const sectionsHtml = (groups, itemsHtml) =>
+  `<input type="search" class="search" data-search placeholder="Search exercises" aria-label="Search exercises">
+  ${groups.map(g => `<div class="sec-group"><h3 class="sec">${esc(g.section)}</h3>${itemsHtml(g.items)}</div>`).join('')}`;
+
+export function filterSections(input) {
+  const query = input.value.trim().toLowerCase();
+  for (const group of input.parentElement.querySelectorAll('.sec-group')) {
+    let shown = 0;
+    for (const item of group.querySelectorAll('[data-id]')) {
+      item.hidden = !(item.dataset.name ?? item.textContent).toLowerCase().includes(query);
+      shown += !item.hidden;
+    }
+    group.hidden = !shown;
+  }
+}
+
 // --- Faces (workout vibe and nutrition share this) ---
 
-const MOUTHS = { bad: 'M8.5 16.5q3.5-3 7 0', ok: 'M8.5 15.5h7', great: 'M8.5 14.5q3.5 3 7 0' };
+// A five-point star centred on (cx, cy), used for the exceptional face's eyes.
+function starPath(cx, cy, r) {
+  const points = Array.from({ length: 10 }, (_, i) => {
+    const angle = (Math.PI / 5) * i - Math.PI / 2, radius = i % 2 ? r * 0.45 : r;
+    return `${(cx + radius * Math.cos(angle)).toFixed(2)} ${(cy + radius * Math.sin(angle)).toFixed(2)}`;
+  });
+  return `M${points.join('L')}Z`;
+}
 
+const dotEyes = '<circle class="eye" cx="8.5" cy="9.5" r="1.2"/><circle class="eye" cx="15.5" cy="9.5" r="1.2"/>';
+const FACES = {
+  bad: `${dotEyes}<path d="M8.5 16.5q3.5-3 7 0"/>`,
+  ok: `${dotEyes}<path d="M8.5 15.5h7"/>`,
+  great: `${dotEyes}<path d="M8.5 14.5q3.5 3 7 0"/>`,
+  exceptional: `<path class="eye" d="${starPath(8.5, 9.5, 2.4)}"/><path class="eye" d="${starPath(15.5, 9.5, 2.4)}"/><path d="M7.5 14q4.5 4.5 9 0"/>`,
+};
+
+// One face per key in `labels`, in order. The exceptional face sits apart, after a divider.
 export function facesHtml(value, labels) {
-  const face = ([key, mouth]) => `<button class="face ${key}${value === key ? ' on' : ''}" data-face="${key}" aria-label="${labels[key]}" aria-pressed="${value === key}">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle class="eye" cx="8.5" cy="9.5" r="1.2"/><circle class="eye" cx="15.5" cy="9.5" r="1.2"/><path d="${mouth}"/></svg></button>`;
-  return `<div class="faces">${Object.entries(MOUTHS).map(face).join('')}</div>
+  const face = key => `${key === 'exceptional' ? '<span class="face-sep" aria-hidden="true"></span>' : ''}
+    <button class="face ${key}${value === key ? ' on' : ''}" data-face="${key}" aria-label="${labels[key]}" aria-pressed="${value === key}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/>${FACES[key]}</svg></button>`;
+  return `<div class="faces">${Object.keys(labels).map(face).join('')}</div>
     <p class="muted small face-label">${value ? labels[value] : ''}</p>`;
 }
 

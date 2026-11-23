@@ -2,7 +2,7 @@
 
 import { state, save, uid } from './store.js';
 import { today, addDays, fmtDay, toInput, fromInput, dateOfIso, fmtTime, fmtDateTime, secondsBetween, fmtHM } from './time.js';
-import { dayType } from './stats.js';
+import { dayType, doneNames } from './stats.js';
 import { esc, setText, facesHtml, toggleValue, ask, tip, go } from './ui.js';
 
 const NUTRITION = { bad: 'Not great', ok: 'OK, could be better', great: 'Great' };
@@ -42,8 +42,15 @@ function renderDayType() {
   const sessions = sessionsToday();
   const type = dayType(state.days, date, sessions.length > 0);
   const btn = (value, label) => `<button data-act="type" data-type="${value}" aria-pressed="${type === value}"${type === value ? ' class="on"' : ''}>${label}</button>`;
+  const names = new Map(state.exercises.map(x => [x.id, x.name]));
+  const card = s => {
+    const done = doneNames(s, names);
+    return `<button class="open vibe-line ${s.vibe ?? ''}" data-act="open" data-id="${s.id}"><b>${esc(s.title || 'Session')} ›</b>
+      <span class="small">${done.length ? esc(done.join(' · ')) : 'Nothing logged yet'}</span></button>`;
+  };
   const workout = sessions.length
-    ? `<div class="stack">${sessions.map(s => `<button data-act="open" data-id="${s.id}">${esc(s.title || 'Session')} ›</button>`).join('')}</div>`
+    ? `<div class="stack">${sessions.map(card).join('')}</div>
+       <p class="muted small">Did cardio as well? Open the session and use + Add exercise.</p>`
     : '<button class="primary wide" data-act="start">Start workout</button>';
   root.querySelector('#day-type').innerHTML = `<h2>Day type</h2>
     <div class="seg">${btn('workout', 'Workout day')}${btn('rest', 'Rest day')}</div>

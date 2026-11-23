@@ -1,7 +1,7 @@
 // Single source of truth: the whole app state, kept in one localStorage key.
 
 const KEY = 'cmk-wt';
-export const VERSION = 1;
+export const VERSION = 3;
 
 export const defaultState = () => ({
   version: VERSION,
@@ -12,13 +12,13 @@ export const defaultState = () => ({
   sleep: [],
   fasts: [],
   active: null,
-  settings: { restSec: 90, lastExport: null, autoRest: false, nudgeDismissedAt: null, iosCardSeen: false },
+  settings: { restSec: 90, lastExport: null, nudgeDismissedAt: null, iosCardSeen: false },
 });
 
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 // Brings saved or imported data up to the current shape. Throws if it is not our data.
-// Later versions add their upgrade steps here (if (raw.version < 2) ...), oldest first.
+// Each version's upgrade step runs in order, oldest first.
 export function migrate(raw) {
   if (!isObject(raw) || !Number.isInteger(raw.version) || raw.version < 1 || raw.version > VERSION) {
     throw new Error('Not a CMK Workout Tracker backup');
@@ -27,6 +27,14 @@ export function migrate(raw) {
   const next = { ...base, ...raw, settings: { ...base.settings, ...raw.settings }, version: VERSION };
   const listsOk = ['exercises', 'workouts', 'sessions', 'sleep', 'fasts'].every(k => Array.isArray(next[k]));
   if (!listsOk || !isObject(next.days)) throw new Error('Backup is damaged');
+  // v2: exercises gain a section (e.g. "Chest"); '' means not sorted yet.
+  if (raw.version < 2) next.exercises = next.exercises.map(x => ({ section: '', ...x }));
+  // v3: each weight set gains an effort rating (null until chosen); rest now always auto-starts.
+  if (raw.version < 3) {
+    const addEffort = e => (Array.isArray(e.reps) && !e.effort ? { ...e, effort: e.reps.map(() => null) } : e);
+    next.sessions = next.sessions.map(s => ({ ...s, entries: s.entries.map(addEffort) }));
+    delete next.settings.autoRest;
+  }
   if (next.active && !next.sessions.some(s => s.id === next.active.sessionId)) next.active = null;
   return next;
 }

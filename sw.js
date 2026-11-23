@@ -1,13 +1,15 @@
 // Cache-first service worker. Bump CACHE whenever any app file changes so phones pick up the new version.
-const CACHE = 'cmk-wt-v1';
+const CACHE = 'cmk-wt-v5';
 const FILES = [
   './', 'index.html', 'styles.css', 'manifest.json', 'icon.svg', 'icon-192.png', 'icon-512.png',
   'js/app.js', 'js/store.js', 'js/time.js', 'js/stats.js', 'js/ui.js', 'js/timers.js',
-  'js/session.js', 'js/workouts.js', 'js/daily.js', 'js/week.js',
+  'js/session.js', 'js/workouts.js', 'js/daily.js', 'js/summary.js',
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
+  // 'reload' skips the browser's HTTP cache, so a new version never caches stale copies of old files.
+  const fresh = FILES.map(file => new Request(file, { cache: 'reload' }));
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(fresh)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', event => {

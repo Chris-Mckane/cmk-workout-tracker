@@ -37,6 +37,19 @@ surviving a real 5 minute lock / app swipe-away / phone restart, and the iOS bac
 - Highlight colour `--accent` (#22d3ee): headings, timer, big numbers, current tab. Change it in one place in `styles.css`.
 - Rest day has its own colour `--rest` (#818cf8) on the Daily toggle and the Week strip; workout days stay green.
 
+## Exercise sections (23 Nov 2026, requested by the user)
+- Exercises have a free-text `section` (e.g. Chest, Legs) with suggestions; data `version` 2, `migrate()` gives old exercises `''`.
+- The library, the workout builder and the session "Add exercise" picker are grouped by section and searchable by name. This replaces the Strength / Cardio grouping in SPEC 5.1.
+- Section order is by body (Chest, Back, Shoulders, Arms, Core, Legs), then made-up sections A to Z, then "Other" (no section), then Cardio. All cardio exercises form the Cardio section and have no section field. Within a section, exercises keep the order they were added.
+- A typed section reuses a known spelling when only the case differs ("chest" -> "Chest").
+- Weight sets each have an effort, tapped to cycle none > W warm up > M maintenance > F fatigue / failure (`entry.effort`, data version 3). It is recorded only; it does not change totals or Personal Bests.
+- The workout timer starts when a session is created. Every added rep restarts the rest countdown, so it runs from the last rep of a set; the auto-rest toggle is gone (this replaces SPEC 5.4's optional toggle).
+- Effort has four levels: W warm up (blue), M maintenance (orange), F fatigue = a couple of reps left (green outline), X failure = no more reps possible (solid bright green). No red. Sets marked before this change as the old combined "failure" stay as failure.
+- The Week tab is now **Summary** (`js/summary.js`) with Day / Week / Month periods; totals come from `periodStats(state, from, to)`. Week and Month show a Monday-first calendar with W/R and nutrition dots; Day shows that date's day type and nutrition. The Daily tab stays the logging screen (and Home).
+- Workout vibe has four faces: Better than nothing (red), Could be better (orange), Great workout (green), and after a divider Exceptional workout (star eyes, bright green `--exceptional`). Nutrition keeps its three faces.
+- Session cards (Session list and Daily) list every exercise done, weights and cardio, and carry a coloured line along the bottom in the vibe colour. Weights and cardio on one day go in one session via + Add exercise.
+- `sw.js` installs with `cache: 'reload'` so an update never caches stale copies from the HTTP cache.
+
 ## Decisions (one line each)
 - Extra module `stats.js` holds all pure derived maths so `tests.html` can cover it without the DOM.
 - Save batching uses a microtask (not rAF) so writes still land when the page is hidden.
