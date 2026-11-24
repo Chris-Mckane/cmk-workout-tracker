@@ -69,7 +69,13 @@ surviving a real 5 minute lock / app swipe-away / phone restart, and the iOS bac
 - Kg has −/+ 2.5 buttons on its own row under the exercise name.
 - Daily log: no cardio hint; sleep and fast lists show 2 entries with Show all / Show less.
 - Home's Fast line shows "Last fast 14h 30m" when a fast ended today.
+- Today's progress folds away to a one-line glance (remembered in `settings.todayOpen`, closed by default); the Start/End fast and Sleep/Wake up buttons always show, styled as glass gradient buttons with no glow: teal fast (brighter teal while fasting), indigo Sleep with a crescent moon, yellow Wake up with a sun.
 - Workout times from an hour up show as h:mm:ss (`fmtClock`), not 70:00.
+
+## Arctic palette (24 Nov 2026, chosen by the user; replaces the SPEC 3 colours)
+- Background #0b1218, cards #13202a, raised #1d2e3b, text #e6eef3, muted #7f97a6, inactive #2c3d4a.
+- Mint #2EF2C4 is the done/primary colour (`--green`); ice blue #5EA8FF is the highlight (`--accent`); exceptional #9dffe9. Red/orange vibes, stars, indigo rest/Sleep, yellow Wake up unchanged.
+- App icon: mint dumbbell (80% size) on a deep ice-blue #12324a tile with curved top-left and bottom-right corners, on the #0b1218 background (replaces SPEC 2's white on dark green). The tile keeps the shape visible inside Android's icon masks. theme/background colour #0b1218.
 
 ## Decisions (one line each)
 - Extra module `stats.js` holds all pure derived maths so `tests.html` can cover it without the DOM.

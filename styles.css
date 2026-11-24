@@ -1,8 +1,9 @@
 :root {
-  --bg: #0f1115; --card: #1a1d24; --raise: #262a33; --text: #e8e8e8; --muted: #8a8f98;
-  --green: #22c55e; --orange: #f59e0b; --red: #ef4444; --grey: #3a3f48;
+  /* Arctic palette: blue-black surfaces, mint for done, ice blue for highlights. */
+  --bg: #0b1218; --card: #13202a; --raise: #1d2e3b; --text: #e6eef3; --muted: #7f97a6;
+  --green: #2EF2C4; --orange: #f59e0b; --red: #ef4444; --grey: #2c3d4a;
   /* Highlight colour for headings, numbers and the current tab; rest days get their own colour. */
-  --accent: #22d3ee; --rest: #818cf8; --exceptional: #39ff7a;
+  --accent: #5EA8FF; --rest: #818cf8; --exceptional: #9dffe9;
   --head: 56px;
 }
 * { box-sizing: border-box; }
@@ -119,6 +120,30 @@ label { display: flex; align-items: center; justify-content: space-between; gap:
 .dragging { position: relative; z-index: 3; opacity: .95; box-shadow: 0 8px 24px rgba(0, 0, 0, .55); outline: 2px solid var(--accent); }
 .dragging .grip { cursor: grabbing; color: var(--accent); }
 .facts li { display: flex; align-items: center; justify-content: space-between; min-height: 32px; }
+.today > summary { gap: 8px; margin-bottom: 4px; color: var(--text); }
+.today > summary h2 { margin-bottom: 2px; }
+.today > summary::after { content: "›"; color: var(--muted); font-size: 22px; transition: transform .15s; }
+.today[open] > summary::after { transform: rotate(90deg); }
+.today + .row { margin-top: 10px; }
+/* Glass buttons: a translucent tint over the card with a light top edge. */
+.glass {
+  position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid rgba(255, 255, 255, .14); font-weight: 600; color: var(--text);
+  background: linear-gradient(135deg, var(--tint-a), var(--tint-b));
+  box-shadow: inset 0 1px rgba(255, 255, 255, .22);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.glass svg { width: 18px; height: 18px; flex: none; }
+.glass::before {
+  content: ""; position: absolute; inset: 0 0 50%; pointer-events: none;
+  background: linear-gradient(rgba(255, 255, 255, .14), rgba(255, 255, 255, 0));
+}
+.glass.fast { --tint-a: rgba(20, 184, 166, .42); --tint-b: rgba(34, 211, 238, .12); }
+/* While fasting, End fast is a brighter teal with a stronger top highlight (still no glow). */
+.glass.fasting { --tint-a: rgba(45, 212, 191, .7); --tint-b: rgba(34, 211, 238, .3); border-color: rgba(255, 255, 255, .3); box-shadow: inset 0 1px rgba(255, 255, 255, .4); }
+.glass.sleep { --tint-a: rgba(129, 140, 248, .42); --tint-b: rgba(34, 211, 238, .14); }
+.glass.wake { --tint-a: rgba(250, 204, 21, .5); --tint-b: rgba(245, 158, 11, .2); }
+.glass.wake svg { color: #fde047; }
 .circle { width: 48px; height: 48px; padding: 0; border-radius: 50%; background: var(--grey); font-size: 18px; font-weight: 700; -webkit-touch-callout: none; }
 details.card { padding: 0 12px; }
 details[open] { padding-bottom: 12px; }

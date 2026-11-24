@@ -12,6 +12,8 @@ import { runningFast, toggleFast, toggleSleep } from './daily.js';
 
 const CARDS = ['today', 'workout'];
 const DAY_TYPES = { workout: 'Workout day', rest: 'Rest day' };
+const MOON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1z"/></svg>';
+const SUN = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>';
 const TILES = [
   ['workouts', 'My workouts', 'Workouts and exercise library'],
   ['daily', 'Daily log', 'Day type, nutrition, sleep, fasting'],
@@ -50,7 +52,14 @@ function todayCard() {
   const sleep = state.sleep.find(x => dateOfIso(x.wake) === date);
   const fast = runningFast();
   const lastFast = state.fasts.filter(f => f.end && dateOfIso(f.end) === date).sort((a, b) => b.end.localeCompare(a.end))[0];
-  return `<h2>Today's progress</h2>
+  const glance = [
+    sessions.length ? plural(sessions.length, 'workout') : 'No workout yet',
+    state.bedtime ? 'Asleep' : sleep && `Slept ${fmtHM(secondsBetween(sleep.bed, sleep.wake))}`,
+    fast && 'Fasting',
+  ].filter(Boolean).join(' · ');
+  // The details fold away (remembered in settings.todayOpen); the buttons always show.
+  return `<details class="today" data-today${state.settings.todayOpen ? ' open' : ''}>
+    <summary><span class="grow"><h2>Today's progress</h2><span class="muted small">${glance}</span></span></summary>
     <ul class="plain facts">
       <li><span class="muted">Workouts</span><b>${sessions.length ? `${plural(sessions.length, 'session')} · ${plural(totals.sets, 'set')}` : 'None yet'}</b></li>
       ${done.length ? `<li class="muted small">${esc(done.join(' · '))}</li>` : ''}
@@ -58,10 +67,10 @@ function todayCard() {
       <li><span class="muted">Nutrition</span><span class="dot ${nutrition ?? ''}" role="img" aria-label="Nutrition ${nutrition ?? 'not rated'}"></span></li>
       <li><span class="muted">Sleep</span><b>${state.bedtime ? `Asleep since ${fmtTime(state.bedtime)}` : sleep ? fmtHM(secondsBetween(sleep.bed, sleep.wake)) : 'Not logged'}</b></li>
       <li><span class="muted">Fast</span><b id="home-fast">${fast ? '' : lastFast ? `Last fast ${fmtHM(secondsBetween(lastFast.start, lastFast.end))}` : 'Not fasting'}</b></li>
-    </ul>
+    </ul></details>
     <div class="row">
-      <button class="grow" data-act="fast">${fast ? 'End fast' : 'Start fast'}</button>
-      <button class="grow" data-act="sleep">${state.bedtime ? 'Wake up' : 'Sleep'}</button>
+      <button class="grow glass fast${fast ? ' fasting' : ''}" data-act="fast">${fast ? 'End fast' : 'Start fast'}</button>
+      <button class="grow glass ${state.bedtime ? 'wake' : 'sleep'}" data-act="sleep">${state.bedtime ? `${SUN} Wake up` : `${MOON} Sleep`}</button>
     </div>`;
 }
 
@@ -108,6 +117,12 @@ export function init(el) {
     save();
     render();
   });
+  // 'toggle' does not bubble, so listen in the capture phase.
+  root.addEventListener('toggle', e => {
+    if (!e.target.matches?.('[data-today]')) return;
+    state.settings.todayOpen = e.target.open;
+    save();
+  }, true);
   enableDrag(root, (list, ids) => {
     state.settings.order.home = ids;
     save();
