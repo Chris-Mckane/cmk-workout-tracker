@@ -6,7 +6,7 @@ export const isStrength = entry => Array.isArray(entry.reps);
 
 // Weight sections in body order, top to bottom. Sections the user makes up come next (A to Z),
 // then weight exercises with no section, then all cardio as one section.
-const BODY_SECTIONS = ['Chest', 'Back', 'Shoulders', 'Arms', 'Core', 'Legs'];
+const BODY_SECTIONS = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Core'];
 const OTHER = 'Other', CARDIO = 'Cardio';
 const sectionOf = x => (x.type === 'cardio' ? CARDIO : x.section?.trim() || OTHER);
 const rank = section => {
@@ -14,6 +14,14 @@ const rank = section => {
   if (body >= 0) return body;
   return BODY_SECTIONS.length + (section === OTHER) + 2 * (section === CARDIO);
 };
+
+// Everything the user can pick: their own exercises (not deleted), then library exercises
+// they have not taken into their own list yet.
+export function catalogue(exercises, library) {
+  const live = exercises.filter(x => !x.archived);
+  const taken = new Set(live.map(x => x.id));
+  return [...live, ...library.filter(x => !taken.has(x.id))];
+}
 
 // Exercises grouped by section, keeping the order they were added within each section.
 export function groupBySection(exercises) {

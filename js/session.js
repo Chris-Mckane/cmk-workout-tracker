@@ -2,7 +2,8 @@
 
 import { state, save, uid } from './store.js';
 import { today, fmtDay, fmtClock, elapsedSec } from './time.js';
-import { buildHistory, measure, pbsOf, isStrength, sessionSummary, groupBySection, doneNames } from './stats.js';
+import { buildHistory, measure, pbsOf, isStrength, sessionSummary, groupBySection, doneNames, catalogue } from './stats.js';
+import { LIBRARY, adopt, detailOf } from './library.js';
 import { esc, sectionsHtml, num, tip, fmtNum, setText, facesHtml, toggleValue, starsHtml, placeLegend, onPress, openSheet, ask, haptic } from './ui.js';
 import * as timers from './timers.js';
 
@@ -102,6 +103,7 @@ function entryHtml(session, entry) {
   return `<article class="card entry" data-ex="${entry.exerciseId}">
     <div class="row" data-legend><h3 class="grow">${name} ${stars}</h3>
       <label><input class="num" data-field="kg" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" value="${entry.kg || ''}" aria-label="${name} weight in kg"> kg</label></div>
+    ${detailOf(entry.exerciseId) ? `<p class="muted small">${esc(detailOf(entry.exerciseId))}</p>` : ''}
     ${last ? `<p class="muted small">last time: ${last.sets} sets, ${last.reps} reps @ ${fmtNum(last.kg)} kg</p>` : ''}
     <p class="muted small">Effort under each set: W warm up · M maintenance · F fatigue · X failure</p>
     <div class="row"><div class="circles">${setsHtml(entry)}</div>
@@ -202,16 +204,18 @@ function changeReps(circle, change) {
 
 function pickExercise(session) {
   const used = new Set(session.entries.map(e => e.exerciseId));
-  const options = state.exercises.filter(x => !x.archived && !used.has(x.id));
+  const options = catalogue(state.exercises, LIBRARY).filter(x => !used.has(x.id));
+  const button = x => `<button class="pick" data-id="${x.id}" data-name="${esc(`${x.name} ${detailOf(x.id)}`)}">${esc(x.name)}${
+    detailOf(x.id) ? `<span class="muted small detail">${esc(detailOf(x.id))}</span>` : ''}</button>`;
   const sheet = openSheet(`<h2>Add exercise</h2>
     ${options.length
-      ? sectionsHtml(groupBySection(options), items => `<div class="stack">${items.map(x => `<button data-id="${x.id}">${esc(x.name)}</button>`).join('')}</div>`)
+      ? sectionsHtml(groupBySection(options), items => `<div class="stack">${items.map(button).join('')}</div>`)
       : '<p class="muted">Nothing to add. Create exercises in Workouts > Exercises.</p>'}
     <div class="row end"><button class="ghost" data-close>Close</button></div>`);
   sheet.addEventListener('click', e => {
-    const ex = exercises.get(e.target.closest('[data-id]')?.dataset.id);
-    if (!ex) return;
-    const entry = newEntry(ex);
+    const id = e.target.closest('[data-id]')?.dataset.id;
+    if (!id) return;
+    const entry = newEntry(adopt(id));
     session.entries.push(entry);
     prefillKg(session, [entry]);
     save();

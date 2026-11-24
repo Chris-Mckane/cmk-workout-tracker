@@ -2,7 +2,8 @@
 
 import { state, save, uid } from './store.js';
 import { esc, sectionsHtml, openSheet, ask, tip, go } from './ui.js';
-import { groupBySection, sectionNames, matchSection } from './stats.js';
+import { groupBySection, sectionNames, matchSection, catalogue } from './stats.js';
+import { LIBRARY, adopt, detailOf, libraryEntry } from './library.js';
 import { startSession } from './session.js';
 
 let root;
@@ -30,24 +31,29 @@ function draftHtml(names) {
     <button class="ghost" data-act="up" aria-label="Move up"${i ? '' : ' disabled'}>▲</button>
     <button class="ghost" data-act="down" aria-label="Move down"${i < last ? '' : ' disabled'}>▼</button>
     <button class="ghost" data-act="remove" aria-label="Remove">✕</button></li>`).join('');
-  const options = live(state.exercises).filter(x => !draft.exerciseIds.includes(x.id));
+  const options = catalogue(state.exercises, LIBRARY).filter(x => !draft.exerciseIds.includes(x.id));
   return `<h1 class="head">${draft.id ? 'Edit' : 'New'} workout</h1>
     <input class="wide" data-field="name" value="${esc(draft.name)}" maxlength="40" placeholder="Name, e.g. Leg Day" aria-label="Workout name">
     <ol class="list">${chosen}</ol>
     <div class="card"><h3>Add from library</h3>
       ${options.length
-        ? sectionsHtml(groupBySection(options), items => `<div class="stack">${items.map(x => `<button data-act="add" data-id="${x.id}">+ ${esc(x.name)}</button>`).join('')}</div>`)
+        ? sectionsHtml(groupBySection(options), items => `<div class="stack">${items.map(x => `<button class="pick" data-act="add" data-id="${x.id}" data-name="${esc(searchText(x))}">+ ${esc(x.name)}${detailHtml(x)}</button>`).join('')}</div>`)
         : '<p class="muted small">Nothing left to add. Create more in the Exercises tab.</p>'}
     </div>
     <div class="row end"><button class="ghost" data-act="cancel">Cancel</button><button class="primary" data-act="save">Save</button></div>`;
 }
 
+// Search matches the name, the equipment and the muscles worked.
+const searchText = x => `${x.name} ${detailOf(x.id)}`;
+const detailHtml = x => (detailOf(x.id) ? `<span class="muted small detail">${esc(detailOf(x.id))}</span>` : '');
+
+// Library exercises can be edited (that takes them into the user's list) but not deleted.
 function exercisesHtml() {
-  const row = x => `<li data-id="${x.id}" data-name="${esc(x.name)}"><span class="grow">${esc(x.name)}
-      <span class="muted small">${x.type === 'strength' ? `${x.defaultSets} sets` : 'cardio'}</span></span>
+  const row = x => `<li data-id="${x.id}" data-name="${esc(searchText(x))}"><span class="grow">${esc(x.name)}
+      <span class="muted small">${x.type === 'strength' ? `${x.defaultSets} sets` : 'cardio'}</span>${detailHtml(x)}</span>
     <button class="ghost" data-act="edit-ex">Edit</button>
-    <button class="ghost" data-act="delete-ex" aria-label="Delete ${esc(x.name)}">✕</button></li>`;
-  const exercises = live(state.exercises);
+    ${x.library ? '' : `<button class="ghost" data-act="delete-ex" aria-label="Delete ${esc(x.name)}">✕</button>`}</li>`;
+  const exercises = catalogue(state.exercises, LIBRARY);
   return `${exercises.length
       ? sectionsHtml(groupBySection(exercises), items => `<ul class="list">${items.map(row).join('')}</ul>`)
       : '<p class="muted card">No exercises yet. Add one and give it a section, like Chest or Legs.</p>'}
@@ -85,7 +91,7 @@ function editExercise(ex) {
     if (!name) return field('name').focus();
     const defaultSets = Math.min(6, Math.max(1, Math.round(field('sets').value) || 4));
     const section = field('type').value === 'cardio' ? '' : matchSection(field('section').value, state.exercises);
-    if (ex) Object.assign(ex, { name, section, defaultSets });
+    if (ex) Object.assign(ex.library ? adopt(ex.id) : ex, { name, section, defaultSets });
     else state.exercises.push({ id: uid(), name, type: field('type').value, section, defaultSets, archived: false });
     save();
     sheet.close();
@@ -139,14 +145,14 @@ async function onClick(e) {
       break;
     }
     case 'delete': return removeItem('workout', id);
-    case 'add': draft.exerciseIds.push(id); break;
+    case 'add': draft.exerciseIds.push(adopt(id).id); break;
     case 'remove': draft.exerciseIds = draft.exerciseIds.filter(x => x !== id); break;
     case 'up': moveDraftItem(id, -1); break;
     case 'down': moveDraftItem(id, 1); break;
     case 'cancel': draft = null; break;
     case 'save': return saveDraft();
     case 'new-ex': return editExercise();
-    case 'edit-ex': return editExercise(state.exercises.find(x => x.id === id));
+    case 'edit-ex': return editExercise(state.exercises.find(x => x.id === id && !x.archived) ?? libraryEntry(id));
     case 'delete-ex': return removeItem('exercise', id);
   }
   render();

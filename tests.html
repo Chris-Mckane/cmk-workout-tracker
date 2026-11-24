@@ -15,7 +15,8 @@
   <ol id="results"></ol>
   <script type="module">
     import * as T from './js/time.js';
-    import { measure, pbsOf, buildHistory, sessionSummary, dayType, periodStats, groupBySection, sectionNames, matchSection, doneNames } from './js/stats.js';
+    import { measure, pbsOf, buildHistory, sessionSummary, dayType, periodStats, groupBySection, sectionNames, matchSection, doneNames, catalogue } from './js/stats.js';
+    import { LIBRARY } from './js/library.js';
     import { migrate, defaultState, VERSION } from './js/store.js';
     import { toggleValue } from './js/ui.js';
 
@@ -148,8 +149,18 @@
     const ex = (name, section) => ({ id: name, name, type: 'strength', section, defaultSets: 4, archived: false });
     const run = { id: 'Run', name: 'Run', type: 'cardio', section: 'Legs', defaultSets: 4, archived: false };
     const lib = [ex('Squat', 'Legs'), run, ex('Plank', ''), ex('Chest fly', 'Chest'), ex('Curl', 'Biceps'), ex('Bench press', 'Chest'), ex('Old', undefined), ex('Row', 'Back')];
-    eq(groupBySection(lib).map(g => [g.section, g.items.map(x => x.name)]), [['Chest', ['Chest fly', 'Bench press']], ['Back', ['Row']], ['Legs', ['Squat']], ['Biceps', ['Curl']], ['Other', ['Plank', 'Old']], ['Cardio', ['Run']]], 'body order, then made-up sections, then Other, then all cardio; added order kept');
-    eq(sectionNames(lib), ['Chest', 'Back', 'Shoulders', 'Arms', 'Core', 'Legs', 'Biceps'], 'section suggestions: body order, then made-up ones, never Cardio');
+    eq(groupBySection(lib).map(g => [g.section, g.items.map(x => x.name)]), [['Chest', ['Chest fly', 'Bench press']], ['Back', ['Row']], ['Biceps', ['Curl']], ['Legs', ['Squat']], ['Other', ['Plank', 'Old']], ['Cardio', ['Run']]], 'body order, then Other, then all cardio; added order kept');
+    eq(groupBySection([ex('Hip circle', 'Glutes'), ex('Squat', 'Legs')]).map(g => g.section), ['Legs', 'Glutes'], 'made-up sections come after the body sections');
+    eq(sectionNames([...lib, ex('Hip circle', 'Glutes')]), ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Core', 'Glutes'], 'section suggestions: body order, then made-up ones, never Cardio');
+
+    // --- Exercise library ---
+    eq(new Set(LIBRARY.map(x => x.id)).size, LIBRARY.length, 'library ids are unique');
+    eq(LIBRARY.every(x => x.muscles && x.equipment && ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs'].includes(x.section)), true, 'every library exercise has a section, equipment and muscles');
+    eq(['Leg press', 'Hack squat', 'Leg curl machine', 'Leg extension', 'Calf raise machine', 'Pec fly machine', 'Reverse fly machine (rear delts)', 'Seated row machine', 'EZ-bar preacher curl'].every(n => LIBRARY.some(x => x.name === n)), true, 'the gym machines are all in the library');
+    const libA = { ...LIBRARY[0], library: true }, libB = LIBRARY[1];
+    const mine = [{ ...ex('My curl', 'Biceps') }, { id: libA.id, name: 'Bench', type: 'strength', section: 'Chest', defaultSets: 5, archived: false }, { id: libB.id, name: libB.name, type: 'strength', section: 'Chest', defaultSets: 4, archived: true }];
+    const cat = catalogue(mine, [libA, libB]);
+    eq(cat.map(x => [x.id, x.library ?? false]), [['My curl', false], [libA.id, false], [libB.id, true]], 'catalogue: own exercises win over the library copy; a deleted one shows from the library again');
     eq(matchSection('  chest ', lib), 'Chest', 'typed section reuses the existing spelling');
     eq(matchSection('legs', []), 'Legs', 'a starter section is matched even before it is used');
     eq(matchSection('Glutes', lib), 'Glutes', 'a new section is kept as typed');

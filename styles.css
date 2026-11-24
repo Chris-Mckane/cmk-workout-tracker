@@ -93,6 +93,8 @@ label { display: flex; align-items: center; justify-content: space-between; gap:
 .effort.fatigue { border-color: var(--green); color: var(--green); }
 .effort.failure { border-color: var(--exceptional); background: var(--exceptional); color: var(--bg); }
 .search { display: block; width: 100%; margin-bottom: 6px; }
+.pick { padding: 8px 14px; text-align: left; }
+.detail { display: block; }
 .circle { width: 48px; height: 48px; padding: 0; border-radius: 50%; background: var(--grey); font-size: 18px; font-weight: 700; -webkit-touch-callout: none; }
 details.card { padding: 0 12px; }
 details[open] { padding-bottom: 12px; }
