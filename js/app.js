@@ -1,7 +1,7 @@
 // App shell: boot, bottom nav, the display ticker, and app-wide tap behaviour.
 
 import { state, load, save, flush } from './store.js';
-import { haptic, tip, isIOS, filterSections } from './ui.js';
+import { haptic, tip, isIOS, filterSections, rememberSection } from './ui.js';
 import { checkRest, unlockAudio, syncWakeLock } from './timers.js';
 import * as session from './session.js';
 import * as workouts from './workouts.js';
@@ -54,6 +54,10 @@ document.addEventListener('click', e => {
 document.addEventListener('input', e => {
   if (e.target.matches('[data-search]')) filterSections(e.target);
 });
+// 'toggle' does not bubble, so listen in the capture phase.
+document.addEventListener('toggle', e => {
+  if (e.target.matches?.('.sec-group')) rememberSection(e.target);
+}, true);
 document.querySelector('nav').addEventListener('click', e => {
   const tab = e.target.closest('button')?.dataset.tab;
   if (tab) show(tab);

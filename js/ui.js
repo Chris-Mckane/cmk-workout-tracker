@@ -23,12 +23,19 @@ export const go = (tab, detail = {}) => document.dispatchEvent(new CustomEvent('
 // Tapping the lit option clears it; tapping another switches to it.
 export const toggleValue = (current, tapped) => (current === tapped ? null : tapped);
 
-// A search box, then one heading per exercise section followed by that section's items.
+// The section folder the user has open, so it stays open across re-renders and between lists.
+const openSections = new Set();
+
+// A search box, then one folder per exercise section (closed unless the user opened it).
 // Items are the elements carrying data-id; their data-name (or text) is what search matches.
 export const sectionsHtml = (groups, itemsHtml) =>
   `<input type="search" class="search" data-search placeholder="Search exercises" aria-label="Search exercises">
-  ${groups.map(g => `<div class="sec-group"><h3 class="sec">${esc(g.section)}</h3>${itemsHtml(g.items)}</div>`).join('')}`;
+  ${groups.map(g => `<details class="sec-group" data-section="${esc(g.section)}"${openSections.has(g.section) ? ' open' : ''}>
+    <summary class="sec">${esc(g.section)}<span class="count">${g.items.length}</span></summary>${itemsHtml(g.items)}</details>`).join('')}`;
 
+const searchOf = group => group.parentElement.querySelector('[data-search]');
+
+// While searching, every folder with a match opens; clearing the search restores the folders.
 export function filterSections(input) {
   const query = input.value.trim().toLowerCase();
   for (const group of input.parentElement.querySelectorAll('.sec-group')) {
@@ -38,6 +45,20 @@ export function filterSections(input) {
       shown += !item.hidden;
     }
     group.hidden = !shown;
+    group.querySelector('.count').textContent = shown;
+    group.open = query ? shown > 0 : openSections.has(group.dataset.section);
+  }
+}
+
+// Folders the user opens by hand work one at a time, to keep lists short; the choice is
+// remembered. Folders opened by a search are left alone.
+export function rememberSection(group) {
+  if (searchOf(group)?.value.trim()) return;
+  if (!group.open) return openSections.delete(group.dataset.section);
+  openSections.clear();
+  openSections.add(group.dataset.section);
+  for (const other of group.parentElement.querySelectorAll('.sec-group[open]')) {
+    if (other !== group) other.open = false;
   }
 }
 

@@ -11,7 +11,9 @@ const VIBES = { bad: 'Better than nothing', ok: 'Could be better', great: 'Great
 const MAX_SETS = 6;
 const EFFORTS = [null, 'warmup', 'maintenance', 'fatigue', 'failure'];
 const EFFORT_NAMES = { warmup: 'Warm up', maintenance: 'Maintenance', fatigue: 'Fatigue (a couple left in the tank)', failure: 'Failure (could not do another rep)' };
-const EFFORT_LETTERS = { warmup: 'W', maintenance: 'M', fatigue: 'F', failure: 'X' };
+// Failure is drawn as a hammer: the set was hammered out to the last possible rep.
+const HAMMER = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><g transform="rotate(-45 12 12)"><rect x="4.5" y="2.5" width="15" height="7" rx="1.5"/><rect x="10.25" y="9" width="3.5" height="13.5" rx="1.5"/></g></svg>';
+const EFFORT_LETTERS = { warmup: 'W', maintenance: 'M', fatigue: 'F', failure: HAMMER };
 
 let root;
 let history;            // rebuilt on every full render, reused by taps in between
@@ -105,7 +107,7 @@ function entryHtml(session, entry) {
       <label><input class="num" data-field="kg" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" value="${entry.kg || ''}" aria-label="${name} weight in kg"> kg</label></div>
     ${detailOf(entry.exerciseId) ? `<p class="muted small">${esc(detailOf(entry.exerciseId))}</p>` : ''}
     ${last ? `<p class="muted small">last time: ${last.sets} sets, ${last.reps} reps @ ${fmtNum(last.kg)} kg</p>` : ''}
-    <p class="muted small">Effort under each set: W warm up · M maintenance · F fatigue · X failure</p>
+    <p class="muted small">Effort under each set: W warm up · M maintenance · F fatigue · ${HAMMER} failure</p>
     <div class="row"><div class="circles">${setsHtml(entry)}</div>
       <button data-act="minus1" data-haptic="long" aria-label="Remove one rep"${entry.reps.some(Boolean) ? '' : ' disabled'}>−1</button></div>
     <div class="row">
@@ -307,7 +309,7 @@ async function onClick(e) {
       const effort = EFFORTS[(EFFORTS.indexOf(entry.effort[i]) + 1) % EFFORTS.length];
       entry.effort[i] = effort;
       btn.className = `effort ${effort ?? ''}`;
-      btn.textContent = EFFORT_LETTERS[effort] ?? '–';
+      btn.innerHTML = EFFORT_LETTERS[effort] ?? '–';
       btn.setAttribute('aria-label', effortLabel(effort, i));
       tip(`Set ${i + 1}: ${EFFORT_NAMES[effort] ?? 'no effort set'}`);
       return save();
