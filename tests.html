@@ -15,7 +15,7 @@
   <ol id="results"></ol>
   <script type="module">
     import * as T from './js/time.js';
-    import { measure, pbsOf, buildHistory, sessionSummary, dayType, periodStats, groupBySection, sectionNames, matchSection, doneNames, catalogue } from './js/stats.js';
+    import { measure, pbsOf, buildHistory, sessionSummary, dayType, periodStats, groupBySection, sectionNames, matchSection, doneNames, catalogue, applyOrder, plannedWorkout } from './js/stats.js';
     import { LIBRARY } from './js/library.js';
     import { migrate, defaultState, VERSION } from './js/store.js';
     import { toggleValue } from './js/ui.js';
@@ -67,7 +67,7 @@
     eq(T.fmtHM(T.secondsBetween(iso('2026-11-15T20:00'), iso('2026-11-16T12:00'))), '16h 0m', 'fast from yesterday to today totals 16h');
     eq(T.secondsBetween(iso('2026-11-16T08:00'), iso('2026-11-16T07:00')), 0, 'a negative span clamps to 0');
     eq(T.fmtClock(65), '01:05', 'fmtClock pads');
-    eq(T.fmtClock(3725), '62:05', 'fmtClock keeps counting minutes past the hour');
+    eq([T.fmtClock(3725), T.fmtClock(3599)], ['1:02:05', '59:59'], 'fmtClock shows hours from an hour up');
     eq(T.elapsedSec({ timerAccumSec: 100, timerStartedAt: null }, 5000), 100, 'paused timer shows accumulated time');
     eq(T.elapsedSec({ timerAccumSec: 100, timerStartedAt: 1000 }, 301000), 400, 'running timer adds time since its start stamp');
     eq(T.restLeftSec(90500, 500), 90, 'rest countdown from its end stamp');
@@ -100,7 +100,7 @@
     eq(pbTypes(runs, 'c', 'run'), [], 'equal distance earns nothing');
     eq(pbsOf({ kg: 65, sets: 4, reps: 52 }, { kg: 60, reps: 48, km: 0 }), [{ type: 'kg', value: 65, was: 60 }, { type: 'reps', value: 52, was: 48 }], 'PB carries the new and previous values');
     const hist = buildHistory([first, session('b', '2026-11-11', [strength('sq', 65, [10, 10])])]);
-    eq(hist.get('b').get('sq').last, { kg: 60, sets: 4, reps: 40, volume: 2400 }, 'last time comes from the previous log');
+    eq(hist.get('b').get('sq').last, { kg: 60, sets: 4, reps: 40, volume: 2400, setReps: [10, 10, 10, 10] }, 'last time comes from the previous log, with the reps of each set');
     eq(sessionSummary(hist.get('a')), { sets: 4, reps: 40 }, 'session summary sums sets and reps');
     const mixed = session('m', '2026-11-23', [strength('row', 50, [8, 8]), strength('curl', 10, [0, 0]), cardio('xt', 20), cardio('bike', 0)]);
     eq(doneNames(mixed, new Map([['row', 'Row'], ['xt', 'Cross trainer']])), ['Row', 'Cross trainer'], 'a session lists every exercise done, weights and cardio, skipping untouched ones');
@@ -153,6 +153,15 @@
     eq(groupBySection([ex('Hip circle', 'Glutes'), ex('Squat', 'Legs')]).map(g => g.section), ['Legs', 'Glutes'], 'made-up sections come after the body sections');
     eq(sectionNames([...lib, ex('Hip circle', 'Glutes')]), ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Core', 'Glutes'], 'section suggestions: body order, then made-up ones, never Cardio');
 
+    // --- Arranging ---
+    eq(applyOrder([{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }], ['c', 'a']).map(x => x.id), ['c', 'a', 'b', 'd'], 'arranged items first, the rest after in their own order');
+    eq(applyOrder(['x', 'y'], undefined, k => k), ['x', 'y'], 'no arranged order keeps the default');
+    eq(groupBySection(lib, { sections: ['Legs', 'Chest'], exercises: ['Bench press'] }).map(g => [g.section, g.items[0].name]).slice(0, 3), [['Legs', 'Squat'], ['Chest', 'Bench press'], ['Back', 'Row']], 'arranged folders and exercises win over the default order');
+
+    // --- Planned next workout ---
+    const plan = (next, archived = false) => ({ workouts: [{ id: 'w1', name: 'Legs A', exerciseIds: [], archived }], settings: { next } });
+    eq([plannedWorkout(plan('w1'))?.name, plannedWorkout(plan(null)), plannedWorkout(plan('w1', true)), plannedWorkout(plan('gone'))], ['Legs A', null, null, null], 'the planned workout shows only while it still exists');
+
     // --- Exercise library ---
     eq(new Set(LIBRARY.map(x => x.id)).size, LIBRARY.length, 'library ids are unique');
     eq(LIBRARY.every(x => x.muscles && x.equipment && ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs'].includes(x.section)), true, 'every library exercise has a section, equipment and muscles');
@@ -167,6 +176,7 @@
 
     // --- migrate() ---
     eq(migrate({ version: 1 }), defaultState(), 'migrate fills every missing field');
+    eq(migrate({ version: 3, sleep: [] }).bedtime, null, 'older data gains an empty bedtime');
     eq(migrate({ version: 1, exercises: [{ id: 'a', name: 'Squat', type: 'strength', defaultSets: 4, archived: false }] }).exercises[0].section, '', 'v1 exercises gain an empty section');
     eq(migrate({ version: 2, exercises: [ex('Squat', 'Legs')] }).exercises[0].section, 'Legs', 'v2 sections are kept');
     const v2 = migrate({ version: 2, settings: { autoRest: true }, sessions: [session('x', '2026-11-20', [strength('sq', 60, [10, 8]), cardio('run', 20)])] });

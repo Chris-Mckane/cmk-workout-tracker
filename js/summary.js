@@ -44,7 +44,7 @@ function exerciseHtml(x) {
 function calendarHtml(days) {
   const now = today();
   const blanks = (parseDate(days[0].date).getDay() + 6) % 7;
-  const cell = d => `<div${d.date === now ? ' class="today"' : ''}><span class="num">${parseDate(d.date).getDate()}</span>
+  const cell = d => `<div${d.date === now ? ' class="today"' : ''}><span class="date-num">${parseDate(d.date).getDate()}</span>
     <b class="day-${d.type}">${TYPE_LETTERS[d.type] ?? '·'}</b>
     ${dot(d.nutrition, `${fmtDay(d.date)}: ${d.type ?? 'no'} day, nutrition ${d.nutrition ?? 'not rated'}`)}</div>`;
   return `<div class="cal">${DAY_LETTERS.map(l => `<div class="muted small">${l}</div>`).join('')}
@@ -132,7 +132,7 @@ async function deleteOlder(before) {
   return 'Old logs deleted.';
 }
 
-function openSettings() {
+export function openSettings() {
   const option = sec => `<option value="${sec}"${sec === state.settings.restSec ? ' selected' : ''}>${sec} s</option>`;
   const sheet = openSheet(`<h2>Settings</h2>
     ${isIOS ? '<p class="muted small">On iPhone, export a backup regularly: iOS can clear web app data.</p>' : ''}

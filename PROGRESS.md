@@ -47,12 +47,29 @@ surviving a real 5 minute lock / app swipe-away / phone restart, and the iOS bac
 - Effort has four levels: W warm up (blue), M maintenance (orange), F fatigue = a couple of reps left (green outline), failure = no more reps possible (hammer icon, solid bright green). No red. Sets marked before this change as the old combined "failure" stay as failure.
 - Built-in exercise library (`js/library.js`, 99 exercises): Chest, Back, Shoulders, Biceps, Triceps, Legs, covering barbell, dumbbell, kettlebell, cable, the gym's machines (leg press, hack squat, leg curl, leg extension, calf raise, pec fly, reverse fly, seated row) and the preacher bench. Each lists equipment and muscles worked. Compiled from standard strength-training knowledge, not from a web search. Ids are `lib-<slug of name>`, so never rename a shipped library exercise.
 - A library exercise joins `state.exercises` (same id) the first time it is added to a workout or session, or edited; library entries cannot be deleted, only the user's copies. Search matches name, equipment and muscles.
+- Failure effort shows the 💪 emoji turned into a white silhouette by CSS (`filter: brightness(0) invert(1)`) on solid green. An X, a hammer, the plain emoji and two hand-drawn SVG arms were tried first and rejected.
+- Home's Today card has Start/End fast and Sleep/Wake up side by side. Sleep stamps `state.bedtime`; Wake up logs a sleep entry from it to now.
+- Next workout always shows Start workout; with nothing chosen it starts a blank workout (no hint text, by request).
+- **Navigation:** the bottom bar has only **Workout** (the session screen) and **Summary**. **Home** (`js/home.js`) is the hub, reached by the header Home button and where the app opens unless a session is in progress: Today's progress (workouts done, day type, nutrition, sleep, fast + Start/End fast), Next workout (or Workout in progress with Resume), and tiles for My workouts, Daily log, Summary, Backup & settings.
+- **Drag to reorder** (`enableDrag`, ⋮ grip on the left of each movable item; only the grip starts a drag so scrolling is unaffected): home cards, exercise folders (Exercises tab only), exercises in a folder, workouts, exercises in the workout builder, and exercise cards in a session. Order kept in `settings.order` { sections, exercises, home } and in the order of `state.workouts` / `workout.exerciseIds` / `session.entries`. This replaced an earlier ▲▼ Arrange sheet.
+- **Finish flow:** Finish session opens a sheet: 1. save the workout's structure (update its workout or save a new one; skipped when unchanged), 2. "Next workout" dropdown (saved workouts, or "+ Build a new workout"). The choice is `settings.next`; Home shows the same dropdown with the planned workout and a Start workout button, and starting it uses it up. "Do again" was removed at the user's request.
+- **Save as workout** in a session: saves its exercises as a new template, or updates the template it came from, so workouts can be built while training.
+- Size is now about 109 KB without icons, over the SPEC 2 target of 100 KB, mostly because of the exercise library (about 12 KB).
 - Exercise sections are collapsible folders (`<details>`) in the library, workout builder and session picker, all closed at first, one open at a time, remembered while the app is open. A search opens every folder with a match and shows match counts.
 - Body sections are now Chest, Back, Shoulders, Biceps, Triceps, Legs, Core ("Arms" became a made-up section).
 - The Week tab is now **Summary** (`js/summary.js`) with Day / Week / Month periods; totals come from `periodStats(state, from, to)`. Week and Month show a Monday-first calendar with W/R and nutrition dots; Day shows that date's day type and nutrition. The Daily tab stays the logging screen (and Home).
 - Workout vibe has four faces: Better than nothing (red), Could be better (orange), Great workout (green), and after a divider Exceptional workout (star eyes, bright green `--exceptional`). Nutrition keeps its three faces.
 - Session cards (Session list and Daily) list every exercise done, weights and cardio, and carry a coloured line along the bottom in the vibe colour. Weights and cardio on one day go in one session via + Add exercise.
 - `sw.js` installs with `cache: 'reload'` so an update never caches stale copies from the HTTP cache.
+
+## UX quick wins (24 Nov 2026, from a run-through with sample data)
+- Workout tab leads with a big Start button for the planned next workout, then the others and a blank workout.
+- The effort key shows once at the top of a session instead of on every card.
+- "Last time" shows the reps of each set: `10 · 10 · 9 · 9 @ 57.5 kg` (history `last.setReps`).
+- Kg has −/+ 2.5 buttons on its own row under the exercise name.
+- Daily log: no cardio hint; sleep and fast lists show 2 entries with Show all / Show less.
+- Home's Fast line shows "Last fast 14h 30m" when a fast ended today.
+- Workout times from an hour up show as h:mm:ss (`fmtClock`), not 70:00.
 
 ## Decisions (one line each)
 - Extra module `stats.js` holds all pure derived maths so `tests.html` can cover it without the DOM.

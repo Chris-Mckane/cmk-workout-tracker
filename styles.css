@@ -91,12 +91,34 @@ label { display: flex; align-items: center; justify-content: space-between; gap:
 .effort.warmup { border-color: #60a5fa; color: #60a5fa; }
 .effort.maintenance { border-color: var(--orange); color: var(--orange); }
 .effort.fatigue { border-color: var(--green); color: var(--green); }
-.effort.failure { border-color: var(--exceptional); background: var(--exceptional); color: var(--bg); }
+.effort.failure { border-color: var(--green); background: var(--green); color: #fff; }
+/* brightness(0) invert(1) turns every drawn pixel of the emoji white: a clean silhouette. */
+.arm { display: block; font-size: 24px; line-height: 1; filter: brightness(0) invert(1); }
+.effort-key .arm { display: inline; font-size: 14px; }
 .search { display: block; width: 100%; margin-bottom: 6px; }
 .pick { padding: 8px 14px; text-align: left; }
 .detail { display: block; }
-.effort svg { display: block; margin: auto; }
-p svg { width: 14px; height: 14px; vertical-align: -2px; }
+.step { margin-top: 14px; }
+.kg { gap: 6px; }
+.kg button { font-size: 22px; font-weight: 700; }
+.effort-help { margin-bottom: 10px; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tile { display: grid; align-content: start; gap: 4px; min-height: 92px; padding: 14px; border-radius: 14px; background: var(--card); text-align: left; }
+.tile b { color: var(--accent); font-size: 16px; }
+.next-select { display: block; width: 100%; min-height: 52px; font-size: 17px; font-weight: 600; color: var(--text); }
+.step > * + * { margin-top: 8px; }
+/* Drag handles: a column of three dots on the left of every movable card or row. */
+.grip {
+  display: flex; align-items: center; justify-content: center; flex: none; width: 28px; min-height: 44px;
+  color: var(--muted); font-size: 22px; font-weight: 700; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none;
+}
+.card[data-drag] { position: relative; padding-left: 34px; }
+.card[data-drag] > .grip { position: absolute; top: 6px; left: 4px; }
+.list li[data-drag] { padding-left: 0; }
+.sec .grip { margin-left: -10px; margin-right: -6px; }
+.dragging { position: relative; z-index: 3; opacity: .95; box-shadow: 0 8px 24px rgba(0, 0, 0, .55); outline: 2px solid var(--accent); }
+.dragging .grip { cursor: grabbing; color: var(--accent); }
+.facts li { display: flex; align-items: center; justify-content: space-between; min-height: 32px; }
 .circle { width: 48px; height: 48px; padding: 0; border-radius: 50%; background: var(--grey); font-size: 18px; font-weight: 700; -webkit-touch-callout: none; }
 details.card { padding: 0 12px; }
 details[open] { padding-bottom: 12px; }
@@ -147,19 +169,19 @@ button.open.vibe-line { padding: 10px 12px 14px; background: var(--raise); }
 .stat { padding: 10px 4px; border-radius: 14px; background: var(--card); text-align: center; }
 .stat b { display: block; font-size: 20px; color: var(--accent); }
 .stat span { font-size: 12px; color: var(--muted); }
-.cal { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 8px; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); row-gap: 8px; }
 .cal div { display: grid; justify-items: center; gap: 2px; }
-.cal .num { font-size: 11px; color: var(--muted); }
-.cal .today .num { color: var(--accent); font-weight: 700; }
+.cal .date-num { font-size: 11px; color: var(--muted); }
+.cal .today .date-num { color: var(--accent); font-weight: 700; }
 .day-workout { color: var(--green); }
 .day-rest { color: var(--rest); }
 
 /* Shell */
 nav {
-  position: fixed; inset: auto 0 0; z-index: 6; display: grid; grid-template-columns: repeat(4, 1fr);
+  position: fixed; inset: auto 0 0; z-index: 6; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid var(--grey); background: var(--card);
 }
-nav button { min-height: 56px; padding: 0; border-radius: 0; background: none; color: var(--muted); font-size: 14px; }
+nav button { min-width: 0; min-height: 56px; padding: 0; border-radius: 0; background: none; color: var(--muted); font-size: 15px; font-weight: 600; }
 nav button.on { background: none; color: var(--accent); box-shadow: inset 0 3px var(--accent); }
 dialog { width: min(92vw, 420px); max-height: 85vh; padding: 0; border: 0; border-radius: 16px; background: var(--card); color: var(--text); }
 dialog::backdrop { background: rgba(0, 0, 0, .6); }

@@ -11,8 +11,9 @@ export const defaultState = () => ({
   days: {},
   sleep: [],
   fasts: [],
+  bedtime: null,  // ISO time the Sleep button was tapped; null when awake
   active: null,
-  settings: { restSec: 90, lastExport: null, nudgeDismissedAt: null, iosCardSeen: false },
+  settings: { restSec: 90, lastExport: null, nudgeDismissedAt: null, iosCardSeen: false, next: null, order: { sections: [], exercises: [], home: [] } },
 });
 
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);

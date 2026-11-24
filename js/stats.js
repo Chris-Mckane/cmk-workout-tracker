@@ -23,13 +23,22 @@ export function catalogue(exercises, library) {
   return [...live, ...library.filter(x => !taken.has(x.id))];
 }
 
-// Exercises grouped by section, keeping the order they were added within each section.
-export function groupBySection(exercises) {
+// Puts items listed in `order` first, in that order; the rest follow in their current order.
+export function applyOrder(items, order = [], key = x => x.id) {
+  const position = new Map(order.map((k, i) => [k, i]));
+  const at = x => position.get(key(x)) ?? Infinity;
+  return items.map((x, i) => [x, i]).sort((a, b) => at(a[0]) - at(b[0]) || a[1] - b[1]).map(([x]) => x);
+}
+
+// Exercises grouped by section. Sections follow the order the user dragged them into, else
+// body order; exercises follow the user's dragged order, else the order they were added.
+export function groupBySection(exercises, order = {}) {
   const groups = new Map();
   for (const x of exercises) groups.set(sectionOf(x), [...(groups.get(sectionOf(x)) ?? []), x]);
-  return [...groups]
+  const ranked = [...groups]
     .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
-    .map(([section, items]) => ({ section, items }));
+    .map(([section, items]) => ({ section, items: applyOrder(items, order.exercises) }));
+  return applyOrder(ranked, order.sections, g => g.section);
 }
 
 // Weight section names: the body sections, then any the user has made up.
@@ -43,6 +52,9 @@ export function matchSection(typed, exercises) {
   const name = typed.trim();
   return sectionNames(exercises).find(s => s.toLowerCase() === name.toLowerCase()) ?? name;
 }
+
+// The workout planned as the next one, if it still exists.
+export const plannedWorkout = state => state.workouts.find(w => w.id === state.settings.next && !w.archived) ?? null;
 
 // The numbers one session entry contributes. A set counts if reps > 0.
 export function measure(entry) {
@@ -82,7 +94,8 @@ export function buildHistory(sessions) {
       records.set(entry.exerciseId, { ...m, logged, best, last, pbs: pbsOf(m, best) });
       if (logged) {
         const top = key => Math.max(best?.[key] ?? 0, m[key] ?? 0);
-        running.set(entry.exerciseId, { last: m, best: { kg: top('kg'), reps: top('reps'), km: top('km') } });
+        const last = isStrength(entry) ? { ...m, setReps: entry.reps.filter(r => r > 0) } : m;
+        running.set(entry.exerciseId, { last, best: { kg: top('kg'), reps: top('reps'), km: top('km') } });
       }
     }
     history.set(session.id, records);

@@ -1,8 +1,8 @@
 // Workouts screen: workout templates, with an Exercises sub-tab for the library.
 
 import { state, save, uid } from './store.js';
-import { esc, sectionsHtml, openSheet, ask, tip, go } from './ui.js';
-import { groupBySection, sectionNames, matchSection, catalogue } from './stats.js';
+import { esc, sectionsHtml, enableDrag, GRIP, openSheet, ask, tip, go } from './ui.js';
+import { groupBySection, sectionNames, matchSection, catalogue, applyOrder } from './stats.js';
 import { LIBRARY, adopt, detailOf, libraryEntry } from './library.js';
 import { startSession } from './session.js';
 
@@ -15,29 +15,27 @@ const isUsed = (kind, id) => state.sessions.some(s =>
   (kind === 'workout' ? s.workoutId === id : s.entries.some(e => e.exerciseId === id)));
 
 function workoutsHtml(names) {
-  const card = w => `<div class="card" data-id="${w.id}">
+  const card = w => `<div class="card" data-id="${w.id}" data-drag="${w.id}">${GRIP}
     <div class="row"><h3 class="grow">${esc(w.name)}</h3><button class="primary" data-act="start">Start</button></div>
     <p class="muted small">${w.exerciseIds.map(id => esc(names.get(id))).join(', ') || 'No exercises yet'}</p>
     <div class="row"><button class="ghost" data-act="edit">Edit</button><button class="ghost danger" data-act="delete">Delete</button></div>
   </div>`;
   const workouts = live(state.workouts);
-  return `${workouts.map(card).join('') || '<p class="muted card">No workouts yet. Add your exercises first, then build a workout like "Leg Day".</p>'}
+  return `<div data-drag-list="workouts">${workouts.map(card).join('')}</div>
+    ${workouts.length ? '' : '<p class="muted card">No workouts yet. Build one here, or start a blank session and use Save as workout.</p>'}
     <button class="wide" data-act="new">+ New workout</button>`;
 }
 
 function draftHtml(names) {
-  const last = draft.exerciseIds.length - 1;
-  const chosen = draft.exerciseIds.map((id, i) => `<li data-id="${id}"><span class="grow">${esc(names.get(id))}</span>
-    <button class="ghost" data-act="up" aria-label="Move up"${i ? '' : ' disabled'}>▲</button>
-    <button class="ghost" data-act="down" aria-label="Move down"${i < last ? '' : ' disabled'}>▼</button>
+  const chosen = draft.exerciseIds.map(id => `<li data-id="${id}" data-drag="${id}">${GRIP}<span class="grow">${esc(names.get(id))}</span>
     <button class="ghost" data-act="remove" aria-label="Remove">✕</button></li>`).join('');
   const options = catalogue(state.exercises, LIBRARY).filter(x => !draft.exerciseIds.includes(x.id));
-  return `<h1 class="head">${draft.id ? 'Edit' : 'New'} workout</h1>
+  return `<h1 class="head">${draft.plan ? 'Build your next workout' : `${draft.id ? 'Edit' : 'New'} workout`}</h1>
     <input class="wide" data-field="name" value="${esc(draft.name)}" maxlength="40" placeholder="Name, e.g. Leg Day" aria-label="Workout name">
-    <ol class="list">${chosen}</ol>
+    <ol class="list" data-drag-list="draft">${chosen}</ol>
     <div class="card"><h3>Add from library</h3>
       ${options.length
-        ? sectionsHtml(groupBySection(options), items => `<div class="stack">${items.map(x => `<button class="pick" data-act="add" data-id="${x.id}" data-name="${esc(searchText(x))}">+ ${esc(x.name)}${detailHtml(x)}</button>`).join('')}</div>`)
+        ? sectionsHtml(groupBySection(options, state.settings.order), items => `<div class="stack">${items.map(x => `<button class="pick" data-act="add" data-id="${x.id}" data-name="${esc(searchText(x))}">+ ${esc(x.name)}${detailHtml(x)}</button>`).join('')}</div>`)
         : '<p class="muted small">Nothing left to add. Create more in the Exercises tab.</p>'}
     </div>
     <div class="row end"><button class="ghost" data-act="cancel">Cancel</button><button class="primary" data-act="save">Save</button></div>`;
@@ -49,13 +47,13 @@ const detailHtml = x => (detailOf(x.id) ? `<span class="muted small detail">${es
 
 // Library exercises can be edited (that takes them into the user's list) but not deleted.
 function exercisesHtml() {
-  const row = x => `<li data-id="${x.id}" data-name="${esc(searchText(x))}"><span class="grow">${esc(x.name)}
+  const row = x => `<li data-id="${x.id}" data-drag="${x.id}" data-name="${esc(searchText(x))}">${GRIP}<span class="grow">${esc(x.name)}
       <span class="muted small">${x.type === 'strength' ? `${x.defaultSets} sets` : 'cardio'}</span>${detailHtml(x)}</span>
     <button class="ghost" data-act="edit-ex">Edit</button>
     ${x.library ? '' : `<button class="ghost" data-act="delete-ex" aria-label="Delete ${esc(x.name)}">✕</button>`}</li>`;
   const exercises = catalogue(state.exercises, LIBRARY);
   return `${exercises.length
-      ? sectionsHtml(groupBySection(exercises), items => `<ul class="list">${items.map(row).join('')}</ul>`)
+      ? sectionsHtml(groupBySection(exercises, state.settings.order), items => `<ul class="list" data-drag-list="section">${items.map(row).join('')}</ul>`, { drag: true })
       : '<p class="muted card">No exercises yet. Add one and give it a section, like Chest or Legs.</p>'}
     <button class="wide sep" data-act="new-ex">+ New exercise</button>`;
 }
@@ -117,16 +115,17 @@ function saveDraft() {
   const name = draft.name.trim();
   if (!name) return tip('Give the workout a name');
   const existing = state.workouts.find(w => w.id === draft.id);
-  if (existing) Object.assign(existing, { name, exerciseIds: draft.exerciseIds });
-  else state.workouts.push({ id: uid(), name, exerciseIds: draft.exerciseIds, archived: false });
+  const workout = existing ?? { id: uid(), name, exerciseIds: [], archived: false };
+  Object.assign(workout, { name, exerciseIds: draft.exerciseIds });
+  if (!existing) state.workouts.push(workout);
+  // A workout built as the next plan becomes the plan, and Home shows it.
+  const planned = draft.plan;
+  if (planned) state.settings.next = workout.id;
   draft = null;
   save();
-  render();
-}
-
-function moveDraftItem(id, step) {
-  const ids = draft.exerciseIds, i = ids.indexOf(id);
-  [ids[i], ids[i + step]] = [ids[i + step], ids[i]];
+  if (!planned) return render();
+  tip(`Next workout: ${name}`);
+  go('home');
 }
 
 async function onClick(e) {
@@ -137,7 +136,7 @@ async function onClick(e) {
     case 'tab': tab = btn.dataset.tab; break;
     case 'start':
       if (state.active && !(await ask('Finish the session in progress and start this one?', 'Start'))) return;
-      return go('session', { openId: startSession(id).id });
+      return go('session', { openId: startSession({ workoutId: id }).id });
     case 'new': draft = { id: null, name: '', exerciseIds: [] }; break;
     case 'edit': {
       const w = state.workouts.find(x => x.id === id);
@@ -147,8 +146,6 @@ async function onClick(e) {
     case 'delete': return removeItem('workout', id);
     case 'add': draft.exerciseIds.push(adopt(id).id); break;
     case 'remove': draft.exerciseIds = draft.exerciseIds.filter(x => x !== id); break;
-    case 'up': moveDraftItem(id, -1); break;
-    case 'down': moveDraftItem(id, 1); break;
     case 'cancel': draft = null; break;
     case 'save': return saveDraft();
     case 'new-ex': return editExercise();
@@ -158,14 +155,31 @@ async function onClick(e) {
   render();
 }
 
+// Saves the order after a drag. The screen already shows it, so nothing re-renders.
+function onDrop(list, ids) {
+  const order = state.settings.order;
+  switch (list.dataset.dragList) {
+    case 'workouts': state.workouts = applyOrder(state.workouts, ids); break;
+    case 'sections': order.sections = ids; break;
+    case 'section': order.exercises = [...order.exercises.filter(id => !ids.includes(id)), ...ids]; break;
+    case 'draft': draft.exerciseIds = ids; return;
+  }
+  save();
+}
+
 export function init(el) {
   root = el;
   root.addEventListener('click', onClick);
+  enableDrag(root, onDrop);
   root.addEventListener('input', e => {
     if (e.target.dataset.field === 'name') draft.name = e.target.value;
   });
 }
 
-export function show() {
+export function show(detail = {}) {
+  if (detail.build) {
+    tab = 'workouts';
+    draft = { id: null, name: '', exerciseIds: [], plan: true };
+  }
   render();
 }

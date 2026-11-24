@@ -77,9 +77,10 @@ export function fmtHM(sec) {
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
+// mm:ss, or h:mm:ss from an hour up.
 export function fmtClock(sec) {
-  const s = Math.max(0, Math.floor(sec));
-  return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
+  const s = Math.max(0, Math.floor(sec)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60;
+  return `${h ? `${h}:` : ''}${pad(m)}:${pad(s % 60)}`;
 }
 
 // Workout timer: accumulated seconds plus the current run, measured from its start stamp.

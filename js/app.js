@@ -3,12 +3,13 @@
 import { state, load, save, flush } from './store.js';
 import { haptic, tip, isIOS, filterSections, rememberSection } from './ui.js';
 import { checkRest, unlockAudio, syncWakeLock } from './timers.js';
+import * as home from './home.js';
 import * as session from './session.js';
 import * as workouts from './workouts.js';
 import * as daily from './daily.js';
 import * as summary from './summary.js';
 
-const screens = { session, workouts, daily, summary };
+const screens = { home, session, workouts, daily, summary };
 const tabs = [...document.querySelectorAll('nav button')];
 let current;
 
@@ -62,7 +63,7 @@ document.querySelector('nav').addEventListener('click', e => {
   const tab = e.target.closest('button')?.dataset.tab;
   if (tab) show(tab);
 });
-document.querySelector('[data-home]').addEventListener('click', () => show('daily', { home: true }));
+document.querySelector('[data-home]').addEventListener('click', () => show('home'));
 document.addEventListener('go', e => show(e.detail.tab, e.detail));
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') flush();
@@ -73,7 +74,7 @@ window.addEventListener('pagehide', flush);
 
 load();
 for (const [name, screen] of Object.entries(screens)) screen.init(document.getElementById(name));
-show(state.active ? 'session' : 'daily');
+show(state.active ? 'session' : 'home');
 showIosCard();
 syncWakeLock();
 setInterval(tick, 500);

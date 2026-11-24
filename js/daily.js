@@ -6,16 +6,33 @@ import { dayType, doneNames } from './stats.js';
 import { esc, setText, facesHtml, toggleValue, ask, tip, go } from './ui.js';
 
 const NUTRITION = { bad: 'Not great', ok: 'OK, could be better', great: 'Great' };
-const RECENT = 5;
+const RECENT = 2;   // entries shown in each recent list until Show all
 
 let root;
 let date = today();
 let sleepEditId = null;
 let fastEditId = null;
+const expanded = new Set();   // recent lists showing every entry
 
 const sessionsToday = () => state.sessions.filter(s => s.date === date);
 const sleepTotal = x => fmtHM(secondsBetween(x.bed, x.wake));
-const runningFast = () => state.fasts.find(f => !f.end);
+export const runningFast = () => state.fasts.find(f => !f.end);
+
+// Starts a fast now, or ends the one in progress now.
+export function toggleFast() {
+  const fast = runningFast();
+  if (fast) fast.end = new Date().toISOString();
+  else state.fasts.push({ id: uid(), start: new Date().toISOString(), end: null });
+  save();
+}
+
+// Sleep stamps bed time now; Wake up then logs the night from that bed time to now.
+export function toggleSleep() {
+  const now = new Date().toISOString();
+  if (state.bedtime) state.sleep.push({ id: uid(), bed: state.bedtime, wake: now });
+  state.bedtime = state.bedtime ? null : now;
+  save();
+}
 
 // Day records exist only while they hold an override or a nutrition rating.
 function setDay(patch) {
@@ -33,10 +50,11 @@ function readSpan(startField, endField, endOptional = false) {
   return { start: fromInput(start), end: end ? fromInput(end) : null };
 }
 
-const recentList = (items, rowHtml, kind) => (items.length ? `<ul class="list">${items.slice(0, RECENT).map(x => `<li data-id="${x.id}">
+const recentList = (items, rowHtml, kind) => (items.length ? `<ul class="list">${(expanded.has(kind) ? items : items.slice(0, RECENT)).map(x => `<li data-id="${x.id}">
     <span class="grow">${rowHtml(x)}</span>
     <button class="ghost" data-act="${kind}-edit">Edit</button>
-    <button class="ghost" data-act="${kind}-delete" aria-label="Delete entry">✕</button></li>`).join('')}</ul>` : '');
+    <button class="ghost" data-act="${kind}-delete" aria-label="Delete entry">✕</button></li>`).join('')}</ul>
+    ${items.length > RECENT ? `<button class="ghost wide" data-act="more" data-kind="${kind}">${expanded.has(kind) ? 'Show less' : `Show all (${items.length})`}</button>` : ''}` : '');
 
 function renderDayType() {
   const sessions = sessionsToday();
@@ -49,8 +67,7 @@ function renderDayType() {
       <span class="small">${done.length ? esc(done.join(' · ')) : 'Nothing logged yet'}</span></button>`;
   };
   const workout = sessions.length
-    ? `<div class="stack">${sessions.map(card).join('')}</div>
-       <p class="muted small">Did cardio as well? Open the session and use + Add exercise.</p>`
+    ? `<div class="stack">${sessions.map(card).join('')}</div>`
     : '<button class="primary wide" data-act="start">Start workout</button>';
   root.querySelector('#day-type').innerHTML = `<h2>Day type</h2>
     <div class="seg">${btn('workout', 'Workout day')}${btn('rest', 'Rest day')}</div>
@@ -175,17 +192,18 @@ function onClick(e) {
     case 'sleep-cancel': sleepEditId = null; return renderSleep();
     case 'sleep-delete': return removeEntry(state.sleep, id, renderSleep);
     case 'fast-start':
-      state.fasts.push({ id: uid(), start: new Date().toISOString(), end: null });
-      save();
-      return renderFasting();
     case 'fast-end':
-      runningFast().end = new Date().toISOString();
-      save();
+      toggleFast();
       return renderFasting();
     case 'fast-save': return saveFast();
     case 'fast-edit': fastEditId = id; return renderFasting();
     case 'fast-cancel': fastEditId = null; return renderFasting();
     case 'fast-delete': return removeEntry(state.fasts, id, renderFasting);
+    case 'more': {
+      const kind = btn.dataset.kind;
+      if (!expanded.delete(kind)) expanded.add(kind);
+      return kind === 'sleep' ? renderSleep() : renderFasting();
+    }
   }
 }
 
@@ -205,8 +223,7 @@ export function init(el) {
   });
 }
 
-// The Home button always lands on today.
 export function show(detail = {}) {
-  if (detail.home) setDate(today());
+  if (detail.date) setDate(detail.date);
   else render();
 }

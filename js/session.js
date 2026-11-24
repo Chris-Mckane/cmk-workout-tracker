@@ -2,18 +2,18 @@
 
 import { state, save, uid } from './store.js';
 import { today, fmtDay, fmtClock, elapsedSec } from './time.js';
-import { buildHistory, measure, pbsOf, isStrength, sessionSummary, groupBySection, doneNames, catalogue } from './stats.js';
+import { buildHistory, measure, pbsOf, isStrength, sessionSummary, groupBySection, doneNames, catalogue, applyOrder, plannedWorkout } from './stats.js';
 import { LIBRARY, adopt, detailOf } from './library.js';
-import { esc, sectionsHtml, num, tip, fmtNum, setText, facesHtml, toggleValue, starsHtml, placeLegend, onPress, openSheet, ask, haptic } from './ui.js';
+import { esc, sectionsHtml, nextSelectHtml, enableDrag, GRIP, go, num, tip, fmtNum, setText, facesHtml, toggleValue, starsHtml, placeLegend, onPress, openSheet, ask, haptic } from './ui.js';
 import * as timers from './timers.js';
 
 const VIBES = { bad: 'Better than nothing', ok: 'Could be better', great: 'Great workout', exceptional: 'Exceptional workout' };
 const MAX_SETS = 6;
 const EFFORTS = [null, 'warmup', 'maintenance', 'fatigue', 'failure'];
 const EFFORT_NAMES = { warmup: 'Warm up', maintenance: 'Maintenance', fatigue: 'Fatigue (a couple left in the tank)', failure: 'Failure (could not do another rep)' };
-// Failure is drawn as a hammer: the set was hammered out to the last possible rep.
-const HAMMER = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><g transform="rotate(-45 12 12)"><rect x="4.5" y="2.5" width="15" height="7" rx="1.5"/><rect x="10.25" y="9" width="3.5" height="13.5" rx="1.5"/></g></svg>';
-const EFFORT_LETTERS = { warmup: 'W', maintenance: 'M', fatigue: 'F', failure: HAMMER };
+// Failure is the flexed-arm emoji, recoloured to a white silhouette by CSS.
+const ARM = '<span class="arm" aria-hidden="true">💪</span>';
+const EFFORT_LETTERS = { warmup: 'W', maintenance: 'M', fatigue: 'F', failure: ARM };
 
 let root;
 let history;            // rebuilt on every full render, reused by taps in between
@@ -40,9 +40,12 @@ function prefillKg(session, entries) {
   }
 }
 
-export function startSession(workoutId, date = today()) {
+// Starts the active session from a workout template, or blank. Starting the planned
+// workout uses up the plan.
+export function startSession({ workoutId = null, date = today() } = {}) {
   if (state.active) timers.finishActive();
   const workout = state.workouts.find(w => w.id === workoutId);
+  if (workout && state.settings.next === workout.id) state.settings.next = null;
   const live = new Map(state.exercises.filter(x => !x.archived).map(x => [x.id, x]));
   const session = {
     id: uid(), date, workoutId: workout?.id ?? null, title: workout?.name ?? 'Session',
@@ -92,7 +95,7 @@ function entryHtml(session, entry) {
   const stars = `<span class="stars">${starsHtml(livePbs(session, entry))}</span>`;
   const remove = `<button class="ghost" data-act="entry-remove" aria-label="Remove ${name}">Remove</button>`;
   if (!isStrength(entry)) {
-    return `<article class="card entry" data-ex="${entry.exerciseId}">
+    return `<article class="card entry" data-ex="${entry.exerciseId}" data-drag="${entry.exerciseId}">${GRIP}
       <div class="row" data-legend><h3 class="grow">${name} ${stars}</h3>${remove}</div>
       <div class="row">
         <label>Minutes <input class="num" data-field="minutes" type="number" inputmode="numeric" min="0" step="1" placeholder="0" value="${entry.minutes || ''}"></label>
@@ -102,12 +105,16 @@ function entryHtml(session, entry) {
   }
   const { last } = history.get(session.id).get(entry.exerciseId);
   const sets = entry.reps.length;
-  return `<article class="card entry" data-ex="${entry.exerciseId}">
-    <div class="row" data-legend><h3 class="grow">${name} ${stars}</h3>
-      <label><input class="num" data-field="kg" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" value="${entry.kg || ''}" aria-label="${name} weight in kg"> kg</label></div>
+  return `<article class="card entry" data-ex="${entry.exerciseId}" data-drag="${entry.exerciseId}">${GRIP}
+    <div class="row" data-legend><h3 class="grow">${name} ${stars}</h3></div>
     ${detailOf(entry.exerciseId) ? `<p class="muted small">${esc(detailOf(entry.exerciseId))}</p>` : ''}
-    ${last ? `<p class="muted small">last time: ${last.sets} sets, ${last.reps} reps @ ${fmtNum(last.kg)} kg</p>` : ''}
-    <p class="muted small">Effort under each set: W warm up · M maintenance · F fatigue · ${HAMMER} failure</p>
+    ${last ? `<p class="muted small">Last time: ${last.setReps.join(' · ')} @ ${fmtNum(last.kg)} kg</p>` : ''}
+    <div class="row kg">
+      <button data-act="kg" data-step="-2.5" aria-label="2.5 kg less">−</button>
+      <input class="num" data-field="kg" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" value="${entry.kg || ''}" aria-label="${name} weight in kg">
+      <span class="muted">kg</span>
+      <button data-act="kg" data-step="2.5" aria-label="2.5 kg more">+</button>
+    </div>
     <div class="row"><div class="circles">${setsHtml(entry)}</div>
       <button data-act="minus1" data-haptic="long" aria-label="Remove one rep"${entry.reps.some(Boolean) ? '' : ' disabled'}>−1</button></div>
     <div class="row">
@@ -123,8 +130,10 @@ function editorHtml(session) {
       <input class="grow" data-field="title" value="${esc(session.title)}" maxlength="40" aria-label="Session title">
       <input type="date" data-field="date" value="${session.date}" aria-label="Session date">
     </div>
-    ${session.entries.map(entry => entryHtml(session, entry)).join('')}
+    ${session.entries.some(isStrength) ? `<p class="muted small effort-help">Effort, tap under a set: W warm up · M maintenance · F fatigue · <span class="effort-key">${ARM}</span> failure</p>` : ''}
+    <div data-drag-list="entries">${session.entries.map(entry => entryHtml(session, entry)).join('')}</div>
     <button class="wide" data-act="add-exercise">+ Add exercise</button>
+    ${session.entries.length ? '<button class="wide" data-act="save-workout">Save as workout</button>' : ''}
     <div class="card center"><h3>Workout vibe</h3><div data-faces>${facesHtml(session.vibe, VIBES)}</div></div>
     <details class="card"><summary>${session.note ? 'Note' : 'Add note'}</summary>
       <textarea data-field="note" rows="3" aria-label="Session note">${esc(session.note)}</textarea></details>
@@ -133,11 +142,14 @@ function editorHtml(session) {
 
 function startHtml() {
   const workouts = state.workouts.filter(w => !w.archived);
-  return `<div class="card"><h2>Start a session</h2>
+  const next = plannedWorkout(state);
+  return `<div class="card"><h2>Start a workout</h2>
     ${startDate && startDate !== today() ? `<p class="muted">Logging for ${fmtDay(startDate, true)}</p>` : ''}
+    ${next ? `<button class="primary wide tall" data-act="start" data-id="${next.id}">Start ${esc(next.name)}</button>
+      <p class="muted small">Or choose another:</p>` : ''}
     <div class="stack">
-      ${workouts.map(w => `<button data-act="start" data-id="${w.id}">${esc(w.name)}</button>`).join('')}
-      <button data-act="start" data-id="">Blank session</button>
+      ${workouts.filter(w => w !== next).map(w => `<button data-act="start" data-id="${w.id}">${esc(w.name)}</button>`).join('')}
+      <button data-act="start" data-id="">Blank workout (build as you go)</button>
     </div>
     ${workouts.length ? '' : '<p class="muted small">Build templates like "Leg Day" in the Workouts tab.</p>'}
   </div>`;
@@ -211,7 +223,7 @@ function pickExercise(session) {
     detailOf(x.id) ? `<span class="muted small detail">${esc(detailOf(x.id))}</span>` : ''}</button>`;
   const sheet = openSheet(`<h2>Add exercise</h2>
     ${options.length
-      ? sectionsHtml(groupBySection(options), items => `<div class="stack">${items.map(button).join('')}</div>`)
+      ? sectionsHtml(groupBySection(options, state.settings.order), items => `<div class="stack">${items.map(button).join('')}</div>`)
       : '<p class="muted">Nothing to add. Create exercises in Workouts > Exercises.</p>'}
     <div class="row end"><button class="ghost" data-close>Close</button></div>`);
   sheet.addEventListener('click', e => {
@@ -222,6 +234,84 @@ function pickExercise(session) {
     prefillKg(session, [entry]);
     save();
     sheet.close();
+    render();
+  });
+}
+
+// --- Saving a session's structure as a workout, and planning the next one ---
+
+const templateOf = session => state.workouts.find(w => w.id === session.workoutId && !w.archived);
+
+// The save controls: update the workout the session came from, or save a new one.
+function saveFormHtml(session) {
+  const template = templateOf(session);
+  return `${template ? `<button class="primary wide" data-update>Update "${esc(template.name)}"</button>
+      <p class="muted small">Or save it as a new workout:</p>` : ''}
+    <label>Name <input name="name" maxlength="40" placeholder="e.g. Back A" value="${template || session.title === 'Session' ? '' : esc(session.title)}"></label>
+    <button class="wide${template ? '' : ' primary'}" data-new>Save new workout</button>`;
+}
+
+// Handles a click on the save controls. Returns the saved workout, or null if nothing was saved.
+function saveStructure(e, sheet, session) {
+  const exerciseIds = session.entries.map(x => x.exerciseId);
+  if (e.target.closest('[data-update]')) {
+    const template = templateOf(session);
+    template.exerciseIds = exerciseIds;
+    return template;
+  }
+  if (!e.target.closest('[data-new]')) return null;
+  const input = sheet.querySelector('[name="name"]'), name = input.value.trim();
+  if (!name) {
+    input.focus();
+    return null;
+  }
+  const workout = { id: uid(), name, exerciseIds, archived: false };
+  state.workouts.push(workout);
+  Object.assign(session, { workoutId: workout.id, title: name });
+  return workout;
+}
+
+// Mid-session: save the workout built so far, so it can be reused.
+function saveAsWorkout(session) {
+  const sheet = openSheet(`<h2>Save as workout</h2>${saveFormHtml(session)}
+    <div class="row end"><button class="ghost" data-close>Cancel</button></div>`);
+  sheet.addEventListener('click', e => {
+    const workout = saveStructure(e, sheet, session);
+    if (!workout) return;
+    save();
+    sheet.close();
+    tip(`Saved workout "${workout.name}"`);
+    render();
+  });
+}
+
+// After Finish: 1. save the workout's structure (skipped when it matches its workout),
+// 2. plan the next workout: a saved one, or build a new one.
+function finishSheet(session) {
+  const exerciseIds = session.entries.map(x => x.exerciseId);
+  const unchanged = templateOf(session)?.exerciseIds.join() === exerciseIds.join();
+  const askToSave = exerciseIds.length > 0 && !unchanged;
+  const picker = () => nextSelectHtml(state.workouts.filter(w => !w.archived), null);
+  const sheet = openSheet(`<h2>Workout finished</h2>
+    ${askToSave ? `<section class="step" data-save-step><h3>1. Save this workout's structure</h3>${saveFormHtml(session)}</section>` : ''}
+    <section class="step"><h3>${askToSave ? '2. ' : ''}Next workout</h3><div data-picker>${picker()}</div></section>
+    <div class="row end"><button class="ghost" data-close>Not now</button></div>`);
+  // Choosing the next workout saves it to Home; choosing build opens the workout builder.
+  sheet.addEventListener('change', e => {
+    if (!e.target.matches('[data-next]') || !e.target.value) return;
+    sheet.close();
+    if (e.target.value === 'build') return go('workouts', { build: true });
+    state.settings.next = e.target.value;
+    save();
+    tip(`Next workout: ${state.workouts.find(w => w.id === e.target.value).name}`);
+    go('home');
+  });
+  sheet.addEventListener('click', e => {
+    const workout = saveStructure(e, sheet, session);
+    if (!workout) return;
+    save();
+    sheet.querySelector('[data-save-step]').innerHTML = `<h3>1. Saved as "${esc(workout.name)}" ✓</h3>`;
+    sheet.querySelector('[data-picker]').innerHTML = picker();
     render();
   });
 }
@@ -247,7 +337,7 @@ async function onClick(e) {
   const entry = card && entryOf(session, card);
   switch (btn.dataset.act) {
     case 'start':
-      openId = startSession(btn.dataset.id, startDate ?? today()).id;
+      openId = startSession({ workoutId: btn.dataset.id || null, date: startDate ?? today() }).id;
       startDate = null;
       return render();
     case 'open':
@@ -262,7 +352,8 @@ async function onClick(e) {
     case 'finish':
       timers.finishActive();
       openId = null;
-      return render();
+      render();
+      return finishSheet(session);
     case 'timer-toggle':
       timers.toggleTimer();
       return tick();
@@ -285,6 +376,8 @@ async function onClick(e) {
       return tick();
     case 'add-exercise':
       return pickExercise(session);
+    case 'save-workout':
+      return saveAsWorkout(session);
     case 'entry-remove':
       if (await ask('Remove this exercise from the session?', 'Remove')) {
         session.entries.splice(session.entries.indexOf(entry), 1);
@@ -312,6 +405,12 @@ async function onClick(e) {
       btn.innerHTML = EFFORT_LETTERS[effort] ?? '–';
       btn.setAttribute('aria-label', effortLabel(effort, i));
       tip(`Set ${i + 1}: ${EFFORT_NAMES[effort] ?? 'no effort set'}`);
+      return save();
+    }
+    case 'kg': {
+      entry.kg = Math.max(0, Math.round((entry.kg + Number(btn.dataset.step)) * 2) / 2);
+      card.querySelector('[data-field="kg"]').value = entry.kg || '';
+      refreshEntry(card, session, entry);
       return save();
     }
     case 'minus1': {
@@ -350,6 +449,11 @@ export function init(el) {
   root.addEventListener('click', onClick);
   root.addEventListener('input', onInput);
   root.addEventListener('change', onChange);
+  enableDrag(root, (list, ids) => {
+    const session = current();
+    session.entries = applyOrder(session.entries, ids, e => e.exerciseId);
+    save();
+  });
   onPress(root, '.circle', {
     tap: circle => {
       haptic('tap');
