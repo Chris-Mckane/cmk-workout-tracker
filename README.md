@@ -1,6 +1,6 @@
 # CMK Workout Tracker
 
-A personal workout tracker that installs to your phone's home screen and works fully offline. Strength sessions (sets, reps, kg), light cardio, a daily log (workout or rest day, nutrition, sleep, fasting) and weekly totals. No accounts, no server: each person's data stays on their own phone.
+A personal workout tracker that installs to your phone's home screen and works fully offline. Strength sessions (sets, reps, kg), light cardio, a daily log (workout or rest day, nutrition, sleep, fasting) and day, week and month summaries, with an exercise library, ready-made workouts and programs. No accounts, no server: each person's data stays on their own phone.
 
 ## Put it online (free)
 
@@ -25,9 +25,9 @@ Open it once while online. After that it runs in flight mode.
 ## Your data
 
 - Everything is stored on the phone, inside the installed app. Nothing is uploaded.
-- Back up from **Week > gear icon > Export backup**. This downloads `cmk-workouts-YYYY-MM-DD.json`. **Import backup** restores it, on the same phone or a new one.
+- Back up from **Home > Backup & settings > Export backup**. This downloads `cmk-workouts-YYYY-MM-DD.json`. **Import backup** restores it, on the same phone or a new one.
 - **iPhone users: export a backup regularly.** iOS is stricter about clearing web app data, and removing the home screen icon deletes it.
-- The app reminds you on the Week screen when your last backup is over 14 days old (7 days on iPhone).
+- The app reminds you on the Summary screen when your last backup is over 14 days old (7 days on iPhone).
 
 ## Things worth knowing
 
@@ -42,4 +42,5 @@ Open it once while online. After that it runs in flight mode.
 - Tests for the pure logic: open `http://localhost:8765/tests.html`. The heading shows PASS or FAIL.
 - **After changing any app file, bump `CACHE` in `sw.js`** (e.g. `cmk-wt-v2`), or installed phones keep serving the old cached version.
 - Changing the stored data shape: raise `VERSION` in `js/store.js` and add the upgrade step to `migrate()`. It runs on load and on import, so old data and old backups keep working.
-- Icons: `icon.svg` is the source. `make-icons.ps1` (Windows PowerShell) redraws `icon-192.png` and `icon-512.png` from the same shapes.
+- Muscle maps: outlines from react-body-highlighter (MIT), see `THIRD_PARTY_LICENSES.md`.
+- Icons: `icon.svg` is the source. `make-icons.ps1` (Windows PowerShell) redraws `app-icon-192.png` and `app-icon-512.png` from the same shapes.

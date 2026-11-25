@@ -77,6 +77,35 @@ surviving a real 5 minute lock / app swipe-away / phone restart, and the iOS bac
 - Mint #2EF2C4 is the done/primary colour (`--green`); ice blue #5EA8FF is the highlight (`--accent`); exceptional #9dffe9. Red/orange vibes, stars, indigo rest/Sleep, yellow Wake up unchanged.
 - App icon: mint dumbbell (80% size) on a deep ice-blue #12324a tile with curved top-left and bottom-right corners, on the #0b1218 background (replaces SPEC 2's white on dark green). The tile keeps the shape visible inside Android's icon masks. theme/background colour #0b1218.
 
+## 25 Nov 2026 round
+- Dates: the app checks the local date every tick; when it changes (left open past midnight, or resumed on a later day) Daily and Summary move to today and the screen re-renders.
+- Nutrition faces sit in Today's progress on Home, always visible like the buttons.
+- Custom exercises: "+ Add exercise to <folder>" in each folder, "+ Create new exercise" in the workout builder and in a session's Add exercise sheet (adds it straight to the session).
+- `tidyExercises` (on load and import): weight exercises with no section get a folder from `guessSection`; one whose name matches a library exercise (`nameKey`, e.g. "EZ preacher curls") merges into it, with sessions, workouts and order following. Library gained Zotman curl, EZ-bar preacher curl 21s, Barbell curl 21s, Spider curl, Cable preacher curl.
+- Phone icon files renamed to `app-icon-192.png` / `app-icon-512.png` so installed apps fetch the new art.
+- Shared components (one definition each, used everywhere): `facesHtml` (every face carries its own label underneath), `nutritionHtml` (titled "Nutrition", Home and Daily), `fastButtonHtml` / `sleepButtonHtml` (glass buttons, Home and Daily log). Unused `.tall`, `.face-label` styles and a needless export removed.
+
+## Muscle maps (25 Nov 2026)
+- `js/muscles.js`: front and back body outlines from react-body-highlighter 2.0.5 (MIT, credited in `THIRD_PARTY_LICENSES.md` and README); `muscleMapHtml({ primary, secondary }, size)` colours main muscles red and supporting ones orange.
+- Library exercises get `primary`/`secondary` areas derived from their muscles text (first muscle leads; `MAIN` lists exercises led by two). Your own exercises use their folder (`musclesOf`).
+- Maps show on session cards, Exercises library rows and as "Muscles trained" on Summary for the period (`musclesTrained`, logged sets only).
+
+## Ready-made workouts (25 Nov 2026)
+- Six built-in workouts (`READY_WORKOUTS` in `js/library.js`): Push, Pull, Legs, Upper body, Lower body, Full body, all from library exercises.
+- They appear in the Next workout dropdown ("(ready-made)"), the Workout tab start list and a "Ready-made workouts" section in Workouts. Starting or planning one copies it into your workouts with the same id (`adoptWorkout`); Once started it is one of your workouts and can be edited there.
+
+## Programs and CMK favourites (25 Nov 2026)
+- The six built-in workouts are **Ready-made workouts**; **CMK favourites** is reserved for the user's own picks (to come).
+- `PROGRAMS` in `js/library.js`: Pure strength 5×5 (A/B) and Madcow 5×5 (Heavy/Light/Heaviest, plain-English tips). Each program workout has `targets` per exercise: reps per working set, a kg step, an optional tip, and one warm-up set first for every 5 × 5 (pre-marked W, ignored for progression).
+- Each program has a plain-English guide (`guide` sections) opened by "Learn about this program" on its card, written from research into 5 × 5 and Madcow 5 × 5.
+- Follow a program (Workouts tab): its workouts join yours (`programId`, hidden from the own list), `settings.program` is set, and its first workout is planned. Finishing a program workout plans the next one (`nextInProgram`), round to the first.
+- Sessions from a program workout get the target number of sets and a suggested weight (`suggestKg`): last kg plus the step if every target rep was hit last time, else the same.
+
+## Final polish (25 Nov 2026)
+- Saved sessions list only on the Workout start screen, never under a live or reopened session.
+- One "Fast times" sheet (`editFastTimes`) to change a fast's start and end, from Home ("Change fast times"), the Daily fasting card and each past fast; replaces the old inline form.
+- README updated for Home/Summary; leftover option and naming cleaned up.
+
 ## Decisions (one line each)
 - Extra module `stats.js` holds all pure derived maths so `tests.html` can cover it without the DOM.
 - Save batching uses a microtask (not rAF) so writes still land when the page is hidden.

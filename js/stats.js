@@ -41,6 +41,47 @@ export function groupBySection(exercises, order = {}) {
   return applyOrder(ranked, order.sections, g => g.section);
 }
 
+// A loose key for matching exercise names: "EZ preacher curls" matches "EZ-bar preacher curl".
+const FILLER = new Set(['bar', 'machine', 'the', 'with', 'a', 'and']);
+export const nameKey = name => name.toLowerCase().split(/[^a-z0-9]+/)
+  .filter(w => w && !FILLER.has(w)).map(w => (w.length > 3 ? w.replace(/s$/, '') : w)).join(' ');
+
+// Best-guess body section from an exercise name, or '' when unsure. Order matters:
+// "leg curl" is legs, "reverse fly" is shoulders, "leg raise" is core.
+const SECTION_RULES = [
+  ['Core', /plank|crunch|sit.?up|leg raise|ab wheel|russian twist|\babs?\b|core|hollow|dead bug/],
+  ['Shoulders', /rear delt|reverse fl(y|ie)|face pull/],
+  ['Legs', /leg curl|hamstring|leg ext|leg press|calf|squat|lunge|hip thrust|glute|romanian|\brdl\b|step.?up|abduct|adduct|good morning/],
+  ['Triceps', /tricep|push.?down|skull|kickback|\bdips?\b|close.?grip|jm press/],
+  ['Biceps', /curl|bicep/],
+  ['Chest', /bench|chest|\bfl(y|ies|ye)\b|\bpec|push.?up|crossover/],
+  ['Shoulders', /shoulder|overhead|military|arnold|lateral|upright|front raise|delt/],
+  ['Back', /row|pull.?down|pull.?up|chin.?up|\blats?\b|deadlift|shrug|back ext|pullover/],
+];
+export const guessSection = name => SECTION_RULES.find(([, rule]) => rule.test(name.toLowerCase()))?.[0] ?? '';
+
+// Gives weight exercises with no section a folder. One that duplicates a library exercise
+// becomes that exercise (same id, sessions and workouts follow), so nothing is listed twice.
+export function tidyExercises(state, library) {
+  const byKey = new Map(library.map(x => [nameKey(x.name), x]));
+  for (const x of state.exercises) {
+    if (x.type === 'cardio' || x.section) continue;
+    const match = byKey.get(nameKey(x.name));
+    const taken = match && state.exercises.some(o => o.id === match.id);
+    const together = match && state.sessions.some(s => s.entries.some(e => e.exerciseId === x.id) && s.entries.some(e => e.exerciseId === match.id));
+    if (match && !taken && !together) {
+      const swap = id => (id === x.id ? match.id : id);
+      for (const s of state.sessions) for (const e of s.entries) e.exerciseId = swap(e.exerciseId);
+      for (const w of state.workouts) w.exerciseIds = w.exerciseIds.map(swap);
+      state.settings.order.exercises = state.settings.order.exercises.map(swap);
+      if (state.settings.next === x.id) state.settings.next = match.id;
+      Object.assign(x, { id: match.id, name: match.name, section: match.section });
+    } else {
+      x.section = match?.section ?? guessSection(x.name);
+    }
+  }
+}
+
 // Weight section names: the body sections, then any the user has made up.
 export const sectionNames = exercises => [...new Set([
   ...BODY_SECTIONS,
@@ -51,6 +92,25 @@ export const sectionNames = exercises => [...new Set([
 export function matchSection(typed, exercises) {
   const name = typed.trim();
   return sectionNames(exercises).find(s => s.toLowerCase() === name.toLowerCase()) ?? name;
+}
+
+// Program target for an exercise: the weight to use next and why. Up a step when every
+// working-set rep was hit last time (the warm-up set does not count); otherwise stay.
+export function suggestKg(last, target) {
+  if (!last) return { kg: 0, why: 'Pick a weight you can do every rep with.' };
+  const skip = target.warmup ?? 0;
+  const hitAll = target.reps.every((r, i) => (last.allReps?.[i + skip] ?? 0) >= r);
+  if (hitAll && target.step) return { kg: last.kg + target.step, why: `+${target.step} kg: you hit every rep last time` };
+  return { kg: last.kg, why: hitAll ? 'Same weight' : 'Same weight until you hit every rep' };
+}
+
+// The workout after this one in its program, going round to the first after the last.
+export function nextInProgram(programs, workoutId) {
+  for (const p of programs) {
+    const i = p.workouts.findIndex(w => w.id === workoutId);
+    if (i >= 0) return p.workouts[(i + 1) % p.workouts.length].id;
+  }
+  return null;
 }
 
 // The workout planned as the next one, if it still exists.
@@ -94,7 +154,7 @@ export function buildHistory(sessions) {
       records.set(entry.exerciseId, { ...m, logged, best, last, pbs: pbsOf(m, best) });
       if (logged) {
         const top = key => Math.max(best?.[key] ?? 0, m[key] ?? 0);
-        const last = isStrength(entry) ? { ...m, setReps: entry.reps.filter(r => r > 0) } : m;
+        const last = isStrength(entry) ? { ...m, setReps: entry.reps.filter(r => r > 0), allReps: [...entry.reps] } : m;
         running.set(entry.exerciseId, { last, best: { kg: top('kg'), reps: top('reps'), km: top('km') } });
       }
     }
@@ -118,6 +178,23 @@ export const dayType = (days, date, hasSession) => days[date]?.type ?? (hasSessi
 const sum = list => list.reduce((a, b) => a + b, 0);
 
 // Totals for every date from `from` to `to` (a day, a Mon-Sun week or a month).
+// Muscle areas worked by the logged weight exercises in some sessions. An area counts as
+// primary if any exercise led with it.
+export function musclesTrained(sessions, musclesOf, exercises) {
+  const byId = new Map(exercises.map(x => [x.id, x]));
+  const primary = new Set(), secondary = new Set();
+  for (const s of sessions) {
+    for (const e of s.entries) {
+      const x = byId.get(e.exerciseId);
+      if (!x || !isStrength(e) || !e.reps.some(Boolean)) continue;
+      const m = musclesOf(x);
+      m.primary.forEach(a => primary.add(a));
+      m.secondary.forEach(a => secondary.add(a));
+    }
+  }
+  return { primary: [...primary], secondary: [...secondary].filter(a => !primary.has(a)) };
+}
+
 export function periodStats(state, from, to, history = buildHistory(state.sessions)) {
   const dates = datesBetween(from, to);
   const inPeriod = date => date >= from && date <= to;

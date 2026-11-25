@@ -2,7 +2,9 @@
 
 import { state, save, replaceState, migrate } from './store.js';
 import { today, weekStart, addDays, weekLabel, fmtDay, fmtHM, dateOfIso, daysSince, monthStart, monthEnd, addMonths, monthLabel, parseDate } from './time.js';
-import { periodStats } from './stats.js';
+import { periodStats, tidyExercises, musclesTrained } from './stats.js';
+import { LIBRARY, musclesOf } from './library.js';
+import { muscleMapHtml } from './muscles.js';
 import { esc, fmtNum, starsHtml, placeLegend, openSheet, ask, isIOS } from './ui.js';
 import { REST_PRESETS } from './timers.js';
 
@@ -21,6 +23,10 @@ const PERIODS = {
 let root;
 let period = 'week';
 let anchor = today();   // any date inside the period on screen
+
+export function newDay() {
+  anchor = today();
+}
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const dot = (colour, label) => `<span class="dot ${colour ?? ''}" role="img" aria-label="${label}"></span>`;
@@ -60,6 +66,14 @@ function daysHtml(w) {
     <span class="grow"></span><span class="muted small">Nutrition</span>${dot(d.nutrition, `Nutrition ${d.nutrition ?? 'not rated'}`)}</p>`;
 }
 
+function trainedHtml(p) {
+  const [from, to] = p.range(anchor);
+  const muscles = musclesTrained(state.sessions.filter(s => s.date >= from && s.date <= to), musclesOf, state.exercises);
+  if (!muscles.primary.length) return '';
+  return `<section class="card center"><h2>Muscles trained</h2>${muscleMapHtml(muscles, 90)}
+    <p class="muted small"><span class="key primary"></span> main <span class="key secondary"></span> supporting</p></section>`;
+}
+
 function render() {
   const p = PERIODS[period];
   const w = periodStats(state, ...p.range(anchor));
@@ -84,6 +98,7 @@ function render() {
       <div data-legend><b>${plural(w.pbs.length, 'Personal Best')} ${p.noun}</b> ${starsHtml(w.pbs)}</div>
       <div class="row"><span class="muted small">Vibe</span>${w.vibes.map(v => dot(v, `Session vibe: ${v ?? 'not rated'}`)).join('') || '<span class="muted small">no sessions</span>'}</div>
     </section>
+    ${trainedHtml(p)}
     <section class="card"><h2>${period === 'day' ? 'Day' : 'Days'}</h2>${daysHtml(w)}</section>
     <section class="card"><h2>By workout</h2>
       ${list(w.byWorkout, x => `<li><b>${esc(x.name)}</b><br><span class="muted small">${plural(x.sessions, 'session')} · ${plural(x.sets, 'set')} · ${plural(x.reps, 'rep')}</span></li>`)}</section>
@@ -109,6 +124,7 @@ async function importBackup(file) {
   let next;
   try {
     next = migrate(JSON.parse(await file.text()));
+    tidyExercises(next, LIBRARY);
   } catch {
     return 'That file is not a CMK Workout Tracker backup.';
   }

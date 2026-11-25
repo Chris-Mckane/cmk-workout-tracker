@@ -15,8 +15,8 @@
   <ol id="results"></ol>
   <script type="module">
     import * as T from './js/time.js';
-    import { measure, pbsOf, buildHistory, sessionSummary, dayType, periodStats, groupBySection, sectionNames, matchSection, doneNames, catalogue, applyOrder, plannedWorkout } from './js/stats.js';
-    import { LIBRARY } from './js/library.js';
+    import { measure, pbsOf, buildHistory, sessionSummary, dayType, periodStats, groupBySection, sectionNames, matchSection, doneNames, catalogue, applyOrder, plannedWorkout, nameKey, guessSection, tidyExercises, musclesTrained, suggestKg, nextInProgram } from './js/stats.js';
+    import { LIBRARY, musclesOf, READY_WORKOUTS, PROGRAMS } from './js/library.js';
     import { migrate, defaultState, VERSION } from './js/store.js';
     import { toggleValue } from './js/ui.js';
 
@@ -100,7 +100,7 @@
     eq(pbTypes(runs, 'c', 'run'), [], 'equal distance earns nothing');
     eq(pbsOf({ kg: 65, sets: 4, reps: 52 }, { kg: 60, reps: 48, km: 0 }), [{ type: 'kg', value: 65, was: 60 }, { type: 'reps', value: 52, was: 48 }], 'PB carries the new and previous values');
     const hist = buildHistory([first, session('b', '2026-11-11', [strength('sq', 65, [10, 10])])]);
-    eq(hist.get('b').get('sq').last, { kg: 60, sets: 4, reps: 40, volume: 2400, setReps: [10, 10, 10, 10] }, 'last time comes from the previous log, with the reps of each set');
+    eq(hist.get('b').get('sq').last, { kg: 60, sets: 4, reps: 40, volume: 2400, setReps: [10, 10, 10, 10], allReps: [10, 10, 10, 10] }, 'last time comes from the previous log, with the reps of each set');
     eq(sessionSummary(hist.get('a')), { sets: 4, reps: 40 }, 'session summary sums sets and reps');
     const mixed = session('m', '2026-11-23', [strength('row', 50, [8, 8]), strength('curl', 10, [0, 0]), cardio('xt', 20), cardio('bike', 0)]);
     eq(doneNames(mixed, new Map([['row', 'Row'], ['xt', 'Cross trainer']])), ['Row', 'Cross trainer'], 'a session lists every exercise done, weights and cardio, skipping untouched ones');
@@ -161,6 +161,44 @@
     // --- Planned next workout ---
     const plan = (next, archived = false) => ({ workouts: [{ id: 'w1', name: 'Legs A', exerciseIds: [], archived }], settings: { next } });
     eq([plannedWorkout(plan('w1'))?.name, plannedWorkout(plan(null)), plannedWorkout(plan('w1', true)), plannedWorkout(plan('gone'))], ['Legs A', null, null, null], 'the planned workout shows only while it still exists');
+
+    // --- Sorting exercises into folders ---
+    eq(nameKey('EZ preacher curls'), nameKey('EZ-bar preacher curl'), 'EZ preacher curls matches EZ-bar preacher curl');
+    eq(nameKey('EZ preacher curl 21s') === nameKey('EZ-bar preacher curl'), false, 'a 21s variant stays its own exercise');
+    eq(['Zotman curl', 'Lying leg curl', 'Reverse fly', 'Hanging leg raise', 'Cable crossover', 'Rope pushdown', 'T-bar row', 'Arnold press', 'Mystery move'].map(guessSection),
+      ['Biceps', 'Legs', 'Shoulders', 'Core', 'Chest', 'Triceps', 'Back', 'Shoulders', ''], 'section guesses from exercise names');
+    const lib2 = [{ id: 'lib-ez', name: 'EZ-bar preacher curl', section: 'Biceps' }];
+    const tidy = { exercises: [{ id: 'u1', name: 'EZ preacher curls', type: 'strength', section: '' }, { id: 'u2', name: 'Zotman curl', type: 'strength', section: '' }, { id: 'u3', name: 'Squat', type: 'strength', section: 'Legs' }],
+      sessions: [session('t', '2026-11-20', [strength('u1', 20, [10])])], workouts: [{ id: 'w', exerciseIds: ['u1', 'u2'] }], settings: { next: null, order: { exercises: ['u1'] } } };
+    tidyExercises(tidy, lib2);
+    eq(tidy.exercises.map(x => [x.id, x.name, x.section]), [['lib-ez', 'EZ-bar preacher curl', 'Biceps'], ['u2', 'Zotman curl', 'Biceps'], ['u3', 'Squat', 'Legs']], 'Other exercises are sorted; a duplicate of a library one merges into it');
+    eq([tidy.sessions[0].entries[0].exerciseId, tidy.workouts[0].exerciseIds, tidy.settings.order.exercises], ['lib-ez', ['lib-ez', 'u2'], ['lib-ez']], 'history and workouts follow the merge');
+
+    // --- Muscles worked ---
+    const libEx = name => LIBRARY.find(x => x.name === name);
+    eq(musclesOf(libEx('Lat pulldown')), { primary: ['upper-back'], secondary: ['biceps', 'back-deltoids', 'trapezius'] }, 'lat pulldown: lats lead, arms and shoulders support');
+    eq(musclesOf(libEx('Romanian deadlift')), { primary: ['hamstring', 'gluteal'], secondary: ['lower-back'] }, 'Romanian deadlift: hamstrings and glutes lead');
+    eq(LIBRARY.every(x => x.primary.length > 0), true, 'every library exercise has a main muscle');
+    eq(musclesOf({ id: 'mine', section: 'Triceps' }), { primary: ['triceps'], secondary: [] }, 'your own exercise uses its folder');
+    const trained = musclesTrained([session('m1', '2026-11-20', [strength(libEx('Lat pulldown').id, 50, [10]), strength(libEx('Barbell curl').id, 30, [0])])], musclesOf, [libEx('Lat pulldown'), libEx('Barbell curl')]);
+    eq(trained, { primary: ['upper-back'], secondary: ['biceps', 'back-deltoids', 'trapezius'] }, 'muscles trained counts only exercises with reps logged');
+
+    // --- Ready-made workouts ---
+    const libIds = new Set(LIBRARY.map(x => x.id));
+    eq(READY_WORKOUTS.flatMap(w => w.exerciseIds).filter(id => !libIds.has(id)), [], 'every ready-made exercise is in the library');
+    eq(new Set(READY_WORKOUTS.map(w => w.id)).size, READY_WORKOUTS.length, 'ready-made workout ids are unique');
+
+    // --- Programs ---
+    eq(PROGRAMS.flatMap(p => p.workouts.flatMap(w => w.exerciseIds)).filter(id => !libIds.has(id)), [], 'every program exercise is in the library');
+    const five = { warmup: 1, reps: [5, 5, 5, 5, 5], step: 2.5 };
+    eq(suggestKg({ kg: 60, allReps: [3, 5, 5, 5, 5, 5] }, five), { kg: 62.5, why: '+2.5 kg: you hit every rep last time' }, '5 of 5 on every working set: add the step (warm-up ignored)');
+    eq(suggestKg({ kg: 60, allReps: [5, 5, 5, 5, 4, 3] }, five).kg, 60, 'missed reps on a working set: same weight');
+    eq(PROGRAMS.flatMap(p => p.workouts.flatMap(w => Object.values(w.targets))).every(t => t.warmup === (t.reps.join() === '5,5,5,5,5' ? 1 : 0)), true, 'every 5 x 5 has one warm-up set, nothing else does');
+    eq(suggestKg(null, five).kg, 0, 'first time: no suggestion');
+    eq(PROGRAMS.every(p => p.guide.length >= 6 && p.guide.every(([t, b]) => t && b.length > 40)), true, 'every program has a guide');
+    const pure = PROGRAMS.find(p => p.name.startsWith('Pure')).workouts.map(w => w.id), madcow = PROGRAMS.find(p => p.name.startsWith('Madcow')).workouts.map(w => w.id);
+    eq([nextInProgram(PROGRAMS, pure[0]), nextInProgram(PROGRAMS, pure[1]), nextInProgram(PROGRAMS, madcow[2])], [pure[1], pure[0], madcow[0]], 'programs rotate A → B → A and Heavy → Light → PR → Heavy');
+    eq(nextInProgram(PROGRAMS, 'not-a-program'), null, 'other workouts do not rotate');
 
     // --- Exercise library ---
     eq(new Set(LIBRARY.map(x => x.id)).size, LIBRARY.length, 'library ids are unique');

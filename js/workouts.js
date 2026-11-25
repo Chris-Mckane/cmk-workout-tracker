@@ -3,7 +3,8 @@
 import { state, save, uid } from './store.js';
 import { esc, sectionsHtml, enableDrag, GRIP, openSheet, ask, tip, go } from './ui.js';
 import { groupBySection, sectionNames, matchSection, catalogue, applyOrder } from './stats.js';
-import { LIBRARY, adopt, detailOf, libraryEntry } from './library.js';
+import { LIBRARY, adopt, detailOf, libraryEntry, musclesOf, READY_WORKOUTS, PROGRAMS, followProgram } from './library.js';
+import { muscleMapHtml } from './muscles.js';
 import { startSession } from './session.js';
 
 let root;
@@ -20,10 +21,31 @@ function workoutsHtml(names) {
     <p class="muted small">${w.exerciseIds.map(id => esc(names.get(id))).join(', ') || 'No exercises yet'}</p>
     <div class="row"><button class="ghost" data-act="edit">Edit</button><button class="ghost danger" data-act="delete">Delete</button></div>
   </div>`;
-  const workouts = live(state.workouts);
+  // Program workouts live in their program's card, not in this list.
+  const workouts = live(state.workouts).filter(w => !w.programId);
+  const taken = new Set(state.workouts.map(w => w.id));
+  const ready = READY_WORKOUTS.filter(w => !taken.has(w.id));
+  const readyCard = w => `<div class="card" data-id="${w.id}">
+    <div class="row"><h3 class="grow">${esc(w.name)}</h3><button class="primary" data-act="start">Start</button></div>
+    <p class="muted small">${esc(w.focus)} · ${w.exerciseIds.length} exercises</p>
+  </div>`;
   return `<div data-drag-list="workouts">${workouts.map(card).join('')}</div>
-    ${workouts.length ? '' : '<p class="muted card">No workouts yet. Build one here, or start a blank session and use Save as workout.</p>'}
-    <button class="wide" data-act="new">+ New workout</button>`;
+    ${workouts.length ? '' : '<p class="muted card">No workouts of your own yet. Start a ready-made one below, build your own, or start a blank session and use Save as workout.</p>'}
+    <button class="wide" data-act="new">+ New workout</button>
+    <h2 class="sep">Programs</h2>${PROGRAMS.map(programHtml).join('')}
+    ${ready.length ? `<h2 class="sep">Ready-made workouts</h2>${ready.map(readyCard).join('')}` : ''}`;
+}
+
+function programHtml(p) {
+  const following = state.settings.program === p.id;
+  return `<div class="card${following ? ' following' : ''}" data-program="${p.id}">
+    <div class="row"><h3 class="grow">${esc(p.name)}</h3>
+      <button class="${following ? 'ghost' : 'primary'}" data-act="${following ? 'unfollow' : 'follow'}">${following ? 'Stop' : 'Follow'}</button></div>
+    <p class="muted small">${esc(p.about)}</p>
+    <p class="small">${p.workouts.map(w => `${w.id === state.settings.next && following ? '<b class="target">' : ''}${esc(w.name.split(' · ')[1])}${w.id === state.settings.next && following ? ' (next)</b>' : ''}`).join(' → ')} → repeat</p>
+    ${following ? '<p class="small target">Following: your next workout is planned after each session.</p>' : ''}
+    <button class="bar-link" data-act="learn">Learn about this program ›</button>
+  </div>`;
 }
 
 function draftHtml(names) {
@@ -34,6 +56,7 @@ function draftHtml(names) {
     <input class="wide" data-field="name" value="${esc(draft.name)}" maxlength="40" placeholder="Name, e.g. Leg Day" aria-label="Workout name">
     <ol class="list" data-drag-list="draft">${chosen}</ol>
     <div class="card"><h3>Add from library</h3>
+      <button class="wide" data-act="create-ex">+ Create new exercise</button>
       ${options.length
         ? sectionsHtml(groupBySection(options, state.settings.order), items => `<div class="stack">${items.map(x => `<button class="pick" data-act="add" data-id="${x.id}" data-name="${esc(searchText(x))}">+ ${esc(x.name)}${detailHtml(x)}</button>`).join('')}</div>`)
         : '<p class="muted small">Nothing left to add. Create more in the Exercises tab.</p>'}
@@ -49,11 +72,13 @@ const detailHtml = x => (detailOf(x.id) ? `<span class="muted small detail">${es
 function exercisesHtml() {
   const row = x => `<li data-id="${x.id}" data-drag="${x.id}" data-name="${esc(searchText(x))}">${GRIP}<span class="grow">${esc(x.name)}
       <span class="muted small">${x.type === 'strength' ? `${x.defaultSets} sets` : 'cardio'}</span>${detailHtml(x)}</span>
+    ${x.type === 'strength' && musclesOf(x).primary.length ? muscleMapHtml(musclesOf(x), 30) : ''}
     <button class="ghost" data-act="edit-ex">Edit</button>
     ${x.library ? '' : `<button class="ghost" data-act="delete-ex" aria-label="Delete ${esc(x.name)}">✕</button>`}</li>`;
   const exercises = catalogue(state.exercises, LIBRARY);
   return `${exercises.length
-      ? sectionsHtml(groupBySection(exercises, state.settings.order), items => `<ul class="list" data-drag-list="section">${items.map(row).join('')}</ul>`, { drag: true })
+      ? sectionsHtml(groupBySection(exercises, state.settings.order), (items, section) => `<ul class="list" data-drag-list="section">${items.map(row).join('')}</ul>
+        <button class="ghost wide" data-act="new-ex" data-section="${esc(section)}">+ Add exercise to ${esc(section)}</button>`, { drag: true })
       : '<p class="muted card">No exercises yet. Add one and give it a section, like Chest or Legs.</p>'}
     <button class="wide sep" data-act="new-ex">+ New exercise</button>`;
 }
@@ -66,12 +91,14 @@ function render() {
     ${tab === 'workouts' ? workoutsHtml(names) : exercisesHtml()}`;
 }
 
-// Exercise type is fixed once created: strength and cardio entries have different shapes.
-function editExercise(ex) {
-  const type = ex?.type ?? 'strength';
+// Creates or edits an exercise. Exercise type is fixed once created (strength and cardio
+// entries have different shapes). New ones can start in a folder (section, or 'Cardio');
+// onSave gets the saved exercise, else this screen re-renders.
+export function editExercise(ex, { section = '', onSave } = {}) {
+  const type = ex?.type ?? (section === 'Cardio' ? 'cardio' : 'strength');
   const sheet = openSheet(`<h2>${ex ? 'Edit' : 'New'} exercise</h2>
     <label>Name <input name="name" value="${esc(ex?.name ?? '')}" maxlength="40"></label>
-    <label data-section${type === 'cardio' ? ' hidden' : ''}>Section <input name="section" list="section-names" value="${esc(ex?.section ?? '')}" maxlength="30" placeholder="e.g. Chest"></label>
+    <label data-section${type === 'cardio' ? ' hidden' : ''}>Section <input name="section" list="section-names" value="${esc(ex?.section ?? (section === 'Other' || section === 'Cardio' ? '' : section))}" maxlength="30" placeholder="Chest"></label>
     <datalist id="section-names">${sectionNames(state.exercises).map(s => `<option value="${esc(s)}">`).join('')}</datalist>
     <label>Type <select name="type"${ex ? ' disabled' : ''}>
       <option value="strength">Strength</option><option value="cardio"${type === 'cardio' ? ' selected' : ''}>Cardio</option></select></label>
@@ -89,11 +116,13 @@ function editExercise(ex) {
     if (!name) return field('name').focus();
     const defaultSets = Math.min(6, Math.max(1, Math.round(field('sets').value) || 4));
     const section = field('type').value === 'cardio' ? '' : matchSection(field('section').value, state.exercises);
-    if (ex) Object.assign(ex.library ? adopt(ex.id) : ex, { name, section, defaultSets });
-    else state.exercises.push({ id: uid(), name, type: field('type').value, section, defaultSets, archived: false });
+    let saved;
+    if (ex) saved = Object.assign(ex.library ? adopt(ex.id) : ex, { name, section, defaultSets });
+    else state.exercises.push(saved = { id: uid(), name, type: field('type').value, section, defaultSets, archived: false });
     save();
     sheet.close();
-    render();
+    if (onSave) onSave(saved);
+    else render();
   });
 }
 
@@ -138,6 +167,20 @@ async function onClick(e) {
       if (state.active && !(await ask('Finish the session in progress and start this one?', 'Start'))) return;
       return go('session', { openId: startSession({ workoutId: id }).id });
     case 'new': draft = { id: null, name: '', exerciseIds: [] }; break;
+    case 'follow':
+      followProgram(btn.closest('[data-program]').dataset.program);
+      tip('Program added: its first workout is your next workout');
+      break;
+    case 'learn': {
+      const p = PROGRAMS.find(x => x.id === btn.closest('[data-program]').dataset.program);
+      openSheet(`<h2>${esc(p.name)}</h2>${p.guide.map(([title, body]) => `<section class="step"><h3>${esc(title)}</h3><p>${esc(body)}</p></section>`).join('')}
+        <div class="row end"><button class="primary" data-close>Got it</button></div>`);
+      return;
+    }
+    case 'unfollow':
+      state.settings.program = null;
+      save();
+      break;
     case 'edit': {
       const w = state.workouts.find(x => x.id === id);
       draft = { id, name: w.name, exerciseIds: [...w.exerciseIds] };
@@ -148,7 +191,9 @@ async function onClick(e) {
     case 'remove': draft.exerciseIds = draft.exerciseIds.filter(x => x !== id); break;
     case 'cancel': draft = null; break;
     case 'save': return saveDraft();
-    case 'new-ex': return editExercise();
+    case 'new-ex': return editExercise(null, { section: btn.dataset.section ?? '' });
+    case 'create-ex':
+      return editExercise(null, { onSave: x => { draft.exerciseIds.push(x.id); render(); } });
     case 'edit-ex': return editExercise(state.exercises.find(x => x.id === id && !x.archived) ?? libraryEntry(id));
     case 'delete-ex': return removeItem('exercise', id);
   }

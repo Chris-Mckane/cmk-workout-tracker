@@ -2,10 +2,12 @@
 
 import { state, save, uid } from './store.js';
 import { today, fmtDay, fmtClock, elapsedSec } from './time.js';
-import { buildHistory, measure, pbsOf, isStrength, sessionSummary, groupBySection, doneNames, catalogue, applyOrder, plannedWorkout } from './stats.js';
-import { LIBRARY, adopt, detailOf } from './library.js';
+import { buildHistory, measure, pbsOf, isStrength, sessionSummary, groupBySection, doneNames, catalogue, applyOrder, plannedWorkout, suggestKg, nextInProgram } from './stats.js';
+import { LIBRARY, adopt, detailOf, musclesOf, workoutChoices, adoptWorkout, PROGRAMS } from './library.js';
+import { muscleMapHtml } from './muscles.js';
 import { esc, sectionsHtml, nextSelectHtml, enableDrag, GRIP, go, num, tip, fmtNum, setText, facesHtml, toggleValue, starsHtml, placeLegend, onPress, openSheet, ask, haptic } from './ui.js';
 import * as timers from './timers.js';
+import { editExercise } from './workouts.js';
 
 const VIBES = { bad: 'Better than nothing', ok: 'Could be better', great: 'Great workout', exceptional: 'Exceptional workout' };
 const MAX_SETS = 6;
@@ -28,15 +30,41 @@ const isActive = session => state.active?.sessionId === session.id;
 const entryOf = (session, card) => session.entries.find(e => e.exerciseId === card.dataset.ex);
 const livePbs = (session, entry) => pbsOf(measure(entry), history.get(session.id).get(entry.exerciseId).best);
 
-const newEntry = ex => (ex.type === 'cardio'
-  ? { exerciseId: ex.id, minutes: 0, km: null }
-  : { exerciseId: ex.id, kg: 0, reps: Array(ex.defaultSets).fill(0), effort: Array(ex.defaultSets).fill(null) });
+// The program target line: reps per set, the suggested weight and why, and any tip.
+function targetHtml(session, entry, last) {
+  const target = targetOf(session, entry.exerciseId);
+  if (!target) return '';
+  const { kg, why } = suggestKg(last, target);
+  const same = target.reps.every(r => r === target.reps[0]);
+  const sets = same ? `${target.reps.length} × ${target.reps[0]}` : target.reps.join(' · ');
+  return `<p class="target small"><b>${target.warmup ? '1 warm-up set, then ' : ''}${sets}</b>${kg ? ` @ ${fmtNum(kg)} kg` : ''} · ${why}
+    ${target.tip ? `<span class="muted detail">${esc(target.tip)}</span>` : ''}</p>`;
+}
 
-// New strength entries start at the kg used last time for that exercise.
+const exerciseMap = id => {
+  const exercise = exercises.get(id);
+  const muscles = exercise ? musclesOf(exercise) : { primary: [] };
+  return muscles.primary.length ? muscleMapHtml(muscles) : '';
+};
+
+// A program workout sets the number of sets; otherwise the exercise's default does.
+const newEntry = (ex, target) => {
+  if (ex.type === 'cardio') return { exerciseId: ex.id, minutes: 0, km: null };
+  const warmup = target?.warmup ?? 0;
+  const sets = target ? warmup + target.reps.length : ex.defaultSets;
+  return { exerciseId: ex.id, kg: 0, reps: Array(sets).fill(0), effort: Array(sets).fill(null).fill('warmup', 0, warmup) };
+};
+
+const targetOf = (session, exerciseId) => state.workouts.find(w => w.id === session.workoutId)?.targets?.[exerciseId];
+
+// New strength entries start at the program's suggested weight, else the kg used last time.
 function prefillKg(session, entries) {
   const records = buildHistory(state.sessions).get(session.id);
   for (const entry of entries) {
-    if (isStrength(entry)) entry.kg = records.get(entry.exerciseId).last?.kg ?? 0;
+    if (!isStrength(entry)) continue;
+    const { last } = records.get(entry.exerciseId);
+    const target = targetOf(session, entry.exerciseId);
+    entry.kg = target ? suggestKg(last, target).kg : last?.kg ?? 0;
   }
 }
 
@@ -44,13 +72,14 @@ function prefillKg(session, entries) {
 // workout uses up the plan.
 export function startSession({ workoutId = null, date = today() } = {}) {
   if (state.active) timers.finishActive();
+  if (workoutId) adoptWorkout(workoutId);
   const workout = state.workouts.find(w => w.id === workoutId);
   if (workout && state.settings.next === workout.id) state.settings.next = null;
   const live = new Map(state.exercises.filter(x => !x.archived).map(x => [x.id, x]));
   const session = {
     id: uid(), date, workoutId: workout?.id ?? null, title: workout?.name ?? 'Session',
     vibe: null, note: '', durationSec: 0,
-    entries: (workout?.exerciseIds ?? []).filter(id => live.has(id)).map(id => newEntry(live.get(id))),
+    entries: (workout?.exerciseIds ?? []).filter(id => live.has(id)).map(id => newEntry(live.get(id), workout.targets?.[id])),
   };
   state.sessions.push(session);
   prefillKg(session, session.entries);
@@ -106,8 +135,10 @@ function entryHtml(session, entry) {
   const { last } = history.get(session.id).get(entry.exerciseId);
   const sets = entry.reps.length;
   return `<article class="card entry" data-ex="${entry.exerciseId}" data-drag="${entry.exerciseId}">${GRIP}
-    <div class="row" data-legend><h3 class="grow">${name} ${stars}</h3></div>
-    ${detailOf(entry.exerciseId) ? `<p class="muted small">${esc(detailOf(entry.exerciseId))}</p>` : ''}
+    <div class="row" data-legend><div class="grow"><h3>${name} ${stars}</h3>
+      ${detailOf(entry.exerciseId) ? `<p class="muted small">${esc(detailOf(entry.exerciseId))}</p>` : ''}</div>
+      ${exerciseMap(entry.exerciseId)}</div>
+    ${targetHtml(session, entry, last)}
     ${last ? `<p class="muted small">Last time: ${last.setReps.join(' · ')} @ ${fmtNum(last.kg)} kg</p>` : ''}
     <div class="row kg">
       <button data-act="kg" data-step="-2.5" aria-label="2.5 kg less">−</button>
@@ -141,21 +172,21 @@ function editorHtml(session) {
 }
 
 function startHtml() {
-  const workouts = state.workouts.filter(w => !w.archived);
+  const workouts = workoutChoices();
   const next = plannedWorkout(state);
   return `<div class="card"><h2>Start a workout</h2>
     ${startDate && startDate !== today() ? `<p class="muted">Logging for ${fmtDay(startDate, true)}</p>` : ''}
     ${next ? `<button class="primary wide tall" data-act="start" data-id="${next.id}">Start ${esc(next.name)}</button>
       <p class="muted small">Or choose another:</p>` : ''}
     <div class="stack">
-      ${workouts.filter(w => w !== next).map(w => `<button data-act="start" data-id="${w.id}">${esc(w.name)}</button>`).join('')}
+      ${workouts.filter(w => w.id !== next?.id).map(w => `<button data-act="start" data-id="${w.id}">${esc(w.name)}</button>`).join('')}
       <button data-act="start" data-id="">Blank workout (build as you go)</button>
     </div>
     ${workouts.length ? '' : '<p class="muted small">Build templates like "Leg Day" in the Workouts tab.</p>'}
   </div>`;
 }
 
-function savedHtml(open) {
+function savedHtml() {
   const item = s => {
     const { sets, reps } = sessionSummary(history.get(s.id));
     const status = isActive(s) ? 'in progress' : fmtClock(s.durationSec);
@@ -168,7 +199,7 @@ function savedHtml(open) {
       </button><button class="ghost" data-act="delete" aria-label="Delete session">✕</button></li>`;
   };
   // Newest first; sessions on the same date keep newest-created first.
-  const saved = [...state.sessions].reverse().filter(s => s !== open).sort((a, b) => b.date.localeCompare(a.date));
+  const saved = [...state.sessions].reverse().sort((a, b) => b.date.localeCompare(a.date));
   return saved.length ? `<h2 class="sep">Saved sessions</h2><ul class="list">${saved.map(item).join('')}</ul>` : '';
 }
 
@@ -176,7 +207,8 @@ function render() {
   const session = current();
   history = buildHistory(state.sessions);
   exercises = new Map(state.exercises.map(x => [x.id, x]));
-  root.innerHTML = (session ? editorHtml(session) : startHtml()) + savedHtml(session);
+  // Saved sessions show only on the start screen, never under a session being logged.
+  root.innerHTML = session ? editorHtml(session) : startHtml() + savedHtml();
   placeLegend(root);
   tick();
 }
@@ -222,11 +254,23 @@ function pickExercise(session) {
   const button = x => `<button class="pick" data-id="${x.id}" data-name="${esc(`${x.name} ${detailOf(x.id)}`)}">${esc(x.name)}${
     detailOf(x.id) ? `<span class="muted small detail">${esc(detailOf(x.id))}</span>` : ''}</button>`;
   const sheet = openSheet(`<h2>Add exercise</h2>
+    <button class="wide" data-create>+ Create new exercise</button>
     ${options.length
       ? sectionsHtml(groupBySection(options, state.settings.order), items => `<div class="stack">${items.map(button).join('')}</div>`)
-      : '<p class="muted">Nothing to add. Create exercises in Workouts > Exercises.</p>'}
+      : ''}
     <div class="row end"><button class="ghost" data-close>Close</button></div>`);
+  const add = exercise => {
+    const entry = newEntry(exercise);
+    session.entries.push(entry);
+    prefillKg(session, [entry]);
+    save();
+    render();
+  };
   sheet.addEventListener('click', e => {
+    if (e.target.closest('[data-create]')) {
+      sheet.close();
+      return editExercise(null, { onSave: add });
+    }
     const id = e.target.closest('[data-id]')?.dataset.id;
     if (!id) return;
     const entry = newEntry(adopt(id));
@@ -291,7 +335,7 @@ function finishSheet(session) {
   const exerciseIds = session.entries.map(x => x.exerciseId);
   const unchanged = templateOf(session)?.exerciseIds.join() === exerciseIds.join();
   const askToSave = exerciseIds.length > 0 && !unchanged;
-  const picker = () => nextSelectHtml(state.workouts.filter(w => !w.archived), null);
+  const picker = () => nextSelectHtml(workoutChoices(), state.settings.next);
   const sheet = openSheet(`<h2>Workout finished</h2>
     ${askToSave ? `<section class="step" data-save-step><h3>1. Save this workout's structure</h3>${saveFormHtml(session)}</section>` : ''}
     <section class="step"><h3>${askToSave ? '2. ' : ''}Next workout</h3><div data-picker>${picker()}</div></section>
@@ -301,7 +345,7 @@ function finishSheet(session) {
     if (!e.target.matches('[data-next]') || !e.target.value) return;
     sheet.close();
     if (e.target.value === 'build') return go('workouts', { build: true });
-    state.settings.next = e.target.value;
+    state.settings.next = adoptWorkout(e.target.value);
     save();
     tip(`Next workout: ${state.workouts.find(w => w.id === e.target.value).name}`);
     go('home');
@@ -350,6 +394,8 @@ async function onClick(e) {
     case 'delete':
       return deleteSession(btn.closest('li').dataset.id);
     case 'finish':
+      // Following a program: its next workout is planned automatically.
+      if (session.workoutId?.startsWith(`${state.settings.program}-`)) state.settings.next = nextInProgram(PROGRAMS, session.workoutId);
       timers.finishActive();
       openId = null;
       render();

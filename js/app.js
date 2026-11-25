@@ -2,6 +2,9 @@
 
 import { state, load, save, flush } from './store.js';
 import { haptic, tip, isIOS, filterSections, rememberSection } from './ui.js';
+import { today } from './time.js';
+import { tidyExercises } from './stats.js';
+import { LIBRARY } from './library.js';
 import { checkRest, unlockAudio, syncWakeLock } from './timers.js';
 import * as home from './home.js';
 import * as session from './session.js';
@@ -12,6 +15,7 @@ import * as summary from './summary.js';
 const screens = { home, session, workouts, daily, summary };
 const tabs = [...document.querySelectorAll('nav button')];
 let current;
+let day = today();
 
 function show(tab, detail) {
   current = tab;
@@ -26,7 +30,18 @@ function show(tab, detail) {
 }
 
 // Only refreshes what is on screen; elapsed times always come from stored timestamps.
+// Re-shows the screen when the local date changes (the app was left open past midnight,
+// or reopened on a later day), so every screen moves to the new today.
+function checkDay() {
+  if (day === today()) return;
+  day = today();
+  daily.newDay();
+  summary.newDay();
+  show(current);
+}
+
 function tick() {
+  checkDay();
   checkRest();
   screens[current].tick?.();
 }
@@ -73,6 +88,8 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', flush);
 
 load();
+tidyExercises(state, LIBRARY);
+save();
 for (const [name, screen] of Object.entries(screens)) screen.init(document.getElementById(name));
 show(state.active ? 'session' : 'home');
 showIosCard();

@@ -3,15 +3,14 @@
 import { state, save, uid } from './store.js';
 import { today, addDays, fmtDay, toInput, fromInput, dateOfIso, fmtTime, fmtDateTime, secondsBetween, fmtHM } from './time.js';
 import { dayType, doneNames } from './stats.js';
-import { esc, setText, facesHtml, toggleValue, ask, tip, go } from './ui.js';
+import { esc, setText, facesHtml, toggleValue, fastButtonHtml, sleepButtonHtml, openSheet, ask, tip, go } from './ui.js';
 
-const NUTRITION = { bad: 'Not great', ok: 'OK, could be better', great: 'Great' };
+export const NUTRITION = { bad: 'Not great', ok: 'OK, could be better', great: 'Great' };
 const RECENT = 2;   // entries shown in each recent list until Show all
 
 let root;
 let date = today();
 let sleepEditId = null;
-let fastEditId = null;
 const expanded = new Set();   // recent lists showing every entry
 
 const sessionsToday = () => state.sessions.filter(s => s.date === date);
@@ -34,20 +33,51 @@ export function toggleSleep() {
   save();
 }
 
+// Change when a fast started or ended, for when the button was tapped late. Leaving
+// "Ended" empty keeps the fast running. onSave runs after a valid save.
+export function editFastTimes(fast, onSave) {
+  const sheet = openSheet(`<h2>Fast times</h2>
+    <label>Started <input type="datetime-local" name="start" value="${toInput(fast.start)}"></label>
+    <label>Ended <input type="datetime-local" name="end" value="${fast.end ? toInput(fast.end) : ''}"></label>
+    <p class="muted small">Leave Ended empty if you are still fasting.</p>
+    <div class="row end"><button class="ghost" data-close>Cancel</button><button class="primary" data-save>Save</button></div>`);
+  sheet.addEventListener('click', e => {
+    if (!e.target.closest('[data-save]')) return;
+    const start = sheet.querySelector('[name="start"]').value, end = sheet.querySelector('[name="end"]').value;
+    if (!start || (end && end <= start)) return tip('End must be after start');
+    if (!end && runningFast() && runningFast() !== fast) return tip('Another fast is already in progress');
+    if (fromInput(start) > new Date().toISOString()) return tip('Start cannot be in the future');
+    Object.assign(fast, { start: fromInput(start), end: end ? fromInput(end) : null });
+    save();
+    sheet.close();
+    onSave();
+  });
+}
+
 // Day records exist only while they hold an override or a nutrition rating.
-function setDay(patch) {
-  const day = { type: null, nutrition: null, ...state.days[date], ...patch };
-  if (day.type || day.nutrition) state.days[date] = day;
-  else delete state.days[date];
+function setDay(patch, on = date) {
+  const day = { type: null, nutrition: null, ...state.days[on], ...patch };
+  if (day.type || day.nutrition) state.days[on] = day;
+  else delete state.days[on];
   save();
 }
 
-// Reads a start/end pair of datetime-local inputs as ISO strings, or null if invalid.
-function readSpan(startField, endField, endOptional = false) {
+export const setNutrition = (on, nutrition) => setDay({ nutrition }, on);
+
+export const nutritionHtml = value => `<div class="nutrition"><h2>Nutrition</h2><div data-faces>${facesHtml(value, NUTRITION)}</div></div>`;
+
+// A phone can keep the app open for days; when the date changes, go back to today.
+export function newDay() {
+  date = today();
+  sleepEditId = null;
+}
+
+// Reads the sleep form's bed and wake inputs as ISO strings, or null if invalid.
+function readSpan(startField, endField) {
   const value = field => root.querySelector(`[data-field="${field}"]`).value;
   const start = value(startField), end = value(endField);
-  if (!start || (!end && !endOptional) || (end && end <= start)) return null;
-  return { start: fromInput(start), end: end ? fromInput(end) : null };
+  if (!start || !end || end <= start) return null;
+  return { start: fromInput(start), end: fromInput(end) };
 }
 
 const recentList = (items, rowHtml, kind) => (items.length ? `<ul class="list">${(expanded.has(kind) ? items : items.slice(0, RECENT)).map(x => `<li data-id="${x.id}">
@@ -82,6 +112,7 @@ function renderSleep() {
   const recent = [...state.sleep].sort((a, b) => b.wake.localeCompare(a.wake));
   root.querySelector('#sleep').innerHTML = `<h2>Sleep</h2>
     <p class="big" id="sleep-total">${entry ? sleepTotal(entry) : '<span class="muted small">Not logged yet</span>'}</p>
+    <div class="row">${sleepButtonHtml(state.bedtime)}</div>
     <label>Bed time <input type="datetime-local" data-field="bed" value="${bed}"></label>
     <label>Awake time <input type="datetime-local" data-field="wake" value="${wake}"></label>
     <div class="row end">${editing ? '<button class="ghost" data-act="sleep-cancel">Cancel</button>' : ''}
@@ -91,17 +122,12 @@ function renderSleep() {
 
 function renderFasting() {
   const running = runningFast();
-  const editing = state.fasts.find(f => f.id === fastEditId);
   const recent = [...state.fasts].sort((a, b) => b.start.localeCompare(a.start));
-  const form = editing ? `<label>Started <input type="datetime-local" data-field="fast-start" value="${toInput(editing.start)}"></label>
-    <label>Ended <input type="datetime-local" data-field="fast-end" value="${editing.end ? toInput(editing.end) : ''}"></label>
-    <div class="row end"><button class="ghost" data-act="fast-cancel">Cancel</button><button class="primary" data-act="fast-save">Save fast</button></div>` : '';
   root.querySelector('#fasting').innerHTML = `<h2>Fasting</h2>
-    ${running
-      ? `<p class="big" id="fast-live"></p><p class="muted small">Started ${fmtDateTime(running.start)}</p>
-         <button class="wide" data-act="fast-end">End fast</button>`
-      : '<button class="primary wide tall" data-act="fast-start">Start fast</button>'}
-    ${form}
+    ${running ? `<p class="big" id="fast-live"></p>
+      <p class="row muted small"><span class="grow">Started ${fmtDateTime(running.start)}</span>
+        <button class="ghost" data-act="fast-edit" data-id="${running.id}">Change times</button></p>` : ''}
+    <div class="row">${fastButtonHtml(Boolean(running))}</div>
     ${recentList(recent, f => `<b>${f.end ? fmtHM(secondsBetween(f.start, f.end)) : 'In progress'}</b>
       <span class="muted small">${fmtDateTime(f.start)} to ${f.end ? fmtDateTime(f.end) : 'now'}</span>`, 'fast')}`;
   tick();
@@ -115,8 +141,7 @@ function render() {
       <button data-act="next" aria-label="Next day">›</button>
     </header>
     <section class="card" id="day-type"></section>
-    <section class="card center"><h2>How was my nutrition today?</h2>
-      <div data-faces>${facesHtml(state.days[date]?.nutrition ?? null, NUTRITION)}</div></section>
+    <section class="card">${nutritionHtml(state.days[date]?.nutrition ?? null)}</section>
     <section class="card" id="sleep"></section>
     <section class="card" id="fasting"></section>`;
   renderDayType();
@@ -153,17 +178,6 @@ function saveSleep() {
   renderSleep();
 }
 
-function saveFast() {
-  const fast = state.fasts.find(f => f.id === fastEditId);
-  const span = readSpan('fast-start', 'fast-end', true);
-  if (!span) return tip('End must be after start');
-  if (!span.end && runningFast() && runningFast() !== fast) return tip('Another fast is already in progress');
-  Object.assign(fast, span);
-  fastEditId = null;
-  save();
-  renderFasting();
-}
-
 async function removeEntry(list, id, rerender) {
   if (!(await ask('Delete this entry?', 'Delete'))) return;
   list.splice(list.findIndex(x => x.id === id), 1);
@@ -191,13 +205,13 @@ function onClick(e) {
     case 'sleep-edit': sleepEditId = id; return renderSleep();
     case 'sleep-cancel': sleepEditId = null; return renderSleep();
     case 'sleep-delete': return removeEntry(state.sleep, id, renderSleep);
-    case 'fast-start':
-    case 'fast-end':
+    case 'fast':
       toggleFast();
       return renderFasting();
-    case 'fast-save': return saveFast();
-    case 'fast-edit': fastEditId = id; return renderFasting();
-    case 'fast-cancel': fastEditId = null; return renderFasting();
+    case 'sleep':
+      toggleSleep();
+      return renderSleep();
+    case 'fast-edit': return editFastTimes(state.fasts.find(f => f.id === id), renderFasting);
     case 'fast-delete': return removeEntry(state.fasts, id, renderFasting);
     case 'more': {
       const kind = btn.dataset.kind;

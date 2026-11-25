@@ -67,7 +67,7 @@ export function rememberSection(group) {
 // The next-workout picker: saved workouts plus "Build a new workout" (value "build").
 export const nextSelectHtml = (workouts, selected) => `<select class="next-select" data-next aria-label="Next workout">
     <option value=""${selected ? '' : ' selected'}>Choose next workout…</option>
-    ${workouts.map(w => `<option value="${w.id}"${w.id === selected ? ' selected' : ''}>${esc(w.name)}</option>`).join('')}
+    ${workouts.map(w => `<option value="${w.id}"${w.id === selected ? ' selected' : ''}>${esc(w.name)}${w.ready ? ' (ready-made)' : ''}</option>`).join('')}
     <option value="build">+ Build a new workout</option>
   </select>`;
 
@@ -157,13 +157,23 @@ const FACES = {
 };
 
 // One face per key in `labels`, in order. The exceptional face sits apart, after a divider.
+// Each face carries its own label underneath it.
 export function facesHtml(value, labels) {
   const face = key => `${key === 'exceptional' ? '<span class="face-sep" aria-hidden="true"></span>' : ''}
-    <button class="face ${key}${value === key ? ' on' : ''}" data-face="${key}" aria-label="${labels[key]}" aria-pressed="${value === key}">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/>${FACES[key]}</svg></button>`;
-  return `<div class="faces">${Object.keys(labels).map(face).join('')}</div>
-    <p class="muted small face-label">${value ? labels[value] : ''}</p>`;
+    <button class="face ${key}${value === key ? ' on' : ''}" data-face="${key}" aria-pressed="${value === key}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/>${FACES[key]}</svg>${labels[key]}</button>`;
+  return `<div class="faces">${Object.keys(labels).map(face).join('')}</div>`;
 }
+
+// --- Fast and sleep buttons (Home and Daily log share these) ---
+
+const MOON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1z"/></svg>';
+const SUN = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>';
+
+export const fastButtonHtml = fasting =>
+  `<button class="grow glass fast${fasting ? ' fasting' : ''}" data-act="fast">${fasting ? 'End fast' : 'Start fast'}</button>`;
+export const sleepButtonHtml = asleep =>
+  `<button class="grow glass ${asleep ? 'wake' : 'sleep'}" data-act="sleep">${asleep ? `${SUN} Wake up` : `${MOON} Sleep`}</button>`;
 
 // --- Personal best stars ---
 
@@ -171,7 +181,7 @@ const PB_NAMES = { kg: 'Kg', reps: 'Reps', km: 'Distance' };
 const PB_UNITS = { kg: ' kg', reps: '', km: ' km' };
 const LEGEND = `<p class="legend muted">Personal Bests: <span class="star kg">★</span> kg <span class="star reps">★</span> reps <span class="star km">★</span> distance</p>`;
 
-export const pbLabel = pb => `${PB_NAMES[pb.type]} Personal Best: ${fmtNum(pb.value)}${PB_UNITS[pb.type]} (was ${fmtNum(pb.was)})`;
+const pbLabel = pb => `${PB_NAMES[pb.type]} Personal Best: ${fmtNum(pb.value)}${PB_UNITS[pb.type]} (was ${fmtNum(pb.was)})`;
 
 export const starsHtml = pbs => pbs.map(pb => {
   const label = esc(pbLabel(pb));

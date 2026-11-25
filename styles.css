@@ -44,7 +44,6 @@ button.on[data-type="rest"] { background: var(--rest); }
 .ghost { background: none; color: var(--muted); }
 .danger { color: var(--red); }
 .wide { display: block; width: 100%; margin-bottom: 10px; }
-.tall { min-height: 64px; font-size: 18px; }
 input, select, textarea {
   max-width: 100%; min-height: 48px; padding: 0 10px; border: 1px solid var(--grey); border-radius: 10px; background: var(--bg);
 }
@@ -99,6 +98,16 @@ label { display: flex; align-items: center; justify-content: space-between; gap:
 .search { display: block; width: 100%; margin-bottom: 6px; }
 .pick { padding: 8px 14px; text-align: left; }
 .detail { display: block; }
+.target { color: var(--accent); }
+.card.following { box-shadow: inset 0 0 0 1px var(--accent); }
+/* A thin full-width link along the bottom of a card. */
+.bar-link { display: block; width: 100%; min-height: 36px; border-top: 1px solid var(--grey); border-radius: 0; background: none; color: var(--accent); font-size: 14px; text-align: center; }
+/* Muscle maps: grey body, red main muscles, orange supporting muscles. */
+.muscle-map { display: inline-flex; gap: 4px; flex: none; }
+.muscle-map polygon { fill: var(--grey); stroke: var(--card); stroke-width: .6; stroke-linejoin: round; }
+.muscle-map .primary, .key.primary { fill: var(--red); background: var(--red); }
+.muscle-map .secondary, .key.secondary { fill: var(--orange); background: var(--orange); }
+.key { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; }
 .step { margin-top: 14px; }
 .kg { gap: 6px; }
 .kg button { font-size: 22px; font-weight: 700; }
@@ -108,6 +117,7 @@ label { display: flex; align-items: center; justify-content: space-between; gap:
 .tile b { color: var(--accent); font-size: 16px; }
 .next-select { display: block; width: 100%; min-height: 52px; font-size: 17px; font-weight: 600; color: var(--text); }
 .step > * + * { margin-top: 8px; }
+.step p { line-height: 1.5; }
 /* Drag handles: a column of three dots on the left of every movable card or row. */
 .grip {
   display: flex; align-items: center; justify-content: center; flex: none; width: 28px; min-height: 44px;
@@ -124,7 +134,8 @@ label { display: flex; align-items: center; justify-content: space-between; gap:
 .today > summary h2 { margin-bottom: 2px; }
 .today > summary::after { content: "›"; color: var(--muted); font-size: 22px; transition: transform .15s; }
 .today[open] > summary::after { transform: rotate(90deg); }
-.today + .row { margin-top: 10px; }
+.today + .nutrition, .nutrition + .row { margin-top: 10px; }
+.nutrition { display: grid; gap: 6px; }
 /* Glass buttons: a translucent tint over the card with a light top edge. */
 .glass {
   position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -170,11 +181,16 @@ span.star { padding: 0; font-size: inherit; }
 /* Faces and coloured dots share the bad / ok / great colours. */
 .faces { display: flex; justify-content: center; align-items: center; gap: 10px; }
 .face-sep { align-self: stretch; width: 2px; margin: 6px 2px; border-radius: 1px; background: var(--grey); }
-.face { width: 64px; height: 64px; padding: 4px; border-radius: 50%; background: none; color: var(--grey); }
+.face {
+  display: grid; justify-items: center; align-content: start; gap: 4px; width: 72px; padding: 2px;
+  background: none; color: var(--muted); font-size: 11px; line-height: 1.2; text-align: center;
+}
+.face svg { width: 52px; height: 52px; color: var(--grey); }
+.face.on svg { color: inherit; }
+.face.on { font-weight: 600; }
 .face.on { background: none; }
-.face svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.face svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
 .face .eye { fill: currentColor; stroke: none; }
-.face-label { min-height: 1.4em; }
 .dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: currentColor; color: var(--grey); vertical-align: middle; }
 .face.on.bad, .dot.bad { color: var(--red); }
 .face.on.ok, .dot.ok { color: var(--orange); }
