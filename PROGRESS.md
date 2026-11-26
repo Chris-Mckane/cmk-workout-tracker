@@ -152,3 +152,4 @@ surviving a real 5 minute lock / app swipe-away / phone restart, and the iOS bac
 - Renamed to CMK-GymApp (title, header, manifest, backups now cmk-gymapp-DATE.json). Storage key stays cmk-wt so existing data carries over.
 - Icons renamed cmk-gymapp-192/512.png so installed phones fetch the logo afresh.
 - Settings > Theme: Dark, Light or Match my phone (settings.theme, data-theme on <html>, light tokens in styles.css).
+- First open asks for the user's name once (settings.name: null = not asked, '' = skipped); Home greets "Good evening, <name>". Editable in Settings > Your name.

@@ -77,7 +77,7 @@ function todayCard() {
 function render() {
   const cards = { today: todayCard, workout: workoutCard };
   const order = applyOrder(CARDS, state.settings.order.home, key => key);
-  root.innerHTML = `<header class="head"><h1>${greeting()}</h1><p class="muted">${fmtDay(today(), true)}</p></header>
+  root.innerHTML = `<header class="head"><h1>${greeting()}${state.settings.name ? `, ${esc(state.settings.name)}` : ''}</h1><p class="muted">${fmtDay(today(), true)}</p></header>
     <div data-drag-list="home">${order.map(key => `<section class="card" data-drag="${key}">${GRIP}${cards[key]()}</section>`).join('')}</div>
     <div class="tiles">${TILES.map(([id, title, hint]) => `<button class="tile" data-open="${id}"><b>${title}</b><span class="muted small">${hint}</span></button>`).join('')}</div>`;
   tick();

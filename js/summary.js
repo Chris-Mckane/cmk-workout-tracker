@@ -7,7 +7,7 @@ import { periodStats, tidyExercises, musclesTrained, sectionVolume, percentOf, b
 import { radarHtml, openHistory } from './progress.js';
 import { LIBRARY, musclesOf } from './library.js';
 import { muscleMapHtml } from './muscles.js';
-import { esc, fmtNum, starsHtml, placeLegend, openSheet, ask, isIOS, applyTheme } from './ui.js';
+import { esc, fmtNum, starsHtml, placeLegend, openSheet, ask, isIOS, applyTheme, go } from './ui.js';
 import { REST_PRESETS } from './timers.js';
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -235,6 +235,7 @@ export function openSettings() {
     <label>Delete logs older than <input type="date" data-field="before"></label>
     <button class="wide danger" data-act="delete-older">Delete older logs</button>
     <label>Rest timer default <select data-field="rest">${REST_PRESETS.map(option).join('')}</select></label>
+    <label>Your name <input data-field="name" value="${esc(state.settings.name ?? '')}" maxlength="30" autocomplete="given-name"></label>
     <label>Theme <select data-field="theme">${[['dark', 'Dark'], ['light', 'Light'], ['auto', 'Match my phone']].map(([v, label]) =>
       `<option value="${v}"${v === state.settings.theme ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
     <p class="muted small" role="status" data-msg></p>
@@ -255,6 +256,10 @@ export function openSettings() {
     if (e.target === file && file.files[0]) {
       report(await importBackup(file.files[0]));
       file.value = '';
+    } else if (e.target.dataset.field === 'name') {
+      state.settings.name = e.target.value.trim();
+      save();
+      if (!document.getElementById('home').hidden) go('home');
     } else if (e.target.dataset.field === 'theme') {
       state.settings.theme = e.target.value;
       save();

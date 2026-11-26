@@ -1,7 +1,7 @@
 // App shell: boot, bottom nav, the display ticker, and app-wide tap behaviour.
 
 import { state, load, save, flush } from './store.js';
-import { haptic, tip, isIOS, filterSections, rememberSection, applyTheme, onPhoneTheme } from './ui.js';
+import { haptic, tip, isIOS, filterSections, rememberSection, applyTheme, onPhoneTheme, openSheet } from './ui.js';
 import { today } from './time.js';
 import { tidyExercises } from './stats.js';
 import { LIBRARY } from './library.js';
@@ -44,6 +44,28 @@ function tick() {
   checkDay();
   checkRest();
   screens[current].tick?.();
+}
+
+// Asked once, on first open: the name Home greets the user by. Skipping stores ''.
+function askName() {
+  if (state.settings.name !== null) return;
+  const sheet = openSheet(`<h2>Welcome to CMK-GymApp</h2>
+    <label>What's your name? <input name="name" maxlength="30" autocomplete="given-name" enterkeyhint="done"></label>
+    <div class="row end"><button class="ghost" data-close>Skip</button><button class="primary" data-save>Save</button></div>`);
+  const input = sheet.querySelector('[name="name"]');
+  const done = () => {
+    state.settings.name = input.value.trim();
+    save();
+    sheet.close();
+    show(current);
+  };
+  sheet.addEventListener('click', e => { if (e.target.closest('[data-save]')) done(); });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') done(); });
+  sheet.addEventListener('close', () => {
+    if (state.settings.name !== null) return;
+    state.settings.name = '';
+    save();
+  });
 }
 
 function showIosCard() {
@@ -95,6 +117,7 @@ onPhoneTheme(() => applyTheme(state.settings.theme));
 for (const [name, screen] of Object.entries(screens)) screen.init(document.getElementById(name));
 show(state.active ? 'session' : 'home');
 showIosCard();
+askName();
 syncWakeLock();
 setInterval(tick, 500);
 
