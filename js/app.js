@@ -21,7 +21,7 @@ function show(tab, detail) {
   current = tab;
   for (const name of Object.keys(screens)) document.getElementById(name).hidden = name !== tab;
   for (const btn of tabs) {
-    const on = btn.dataset.tab === tab;
+    const on = btn.dataset.tab === (tab === 'workouts' || tab === 'daily' ? 'home' : tab);
     btn.classList.toggle('on', on);
     btn.setAttribute('aria-current', on ? 'page' : 'false');
   }

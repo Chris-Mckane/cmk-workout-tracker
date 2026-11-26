@@ -34,7 +34,7 @@ function workoutCard() {
   return `<h2>Next workout</h2>
     ${nextSelectHtml(workoutChoices(), next?.id)}
     ${next ? `<p class="muted small">${next.exerciseIds.map(id => esc(names.get(id) ?? '')).filter(Boolean).join(' · ') || 'No exercises yet'}</p>` : ''}
-    <button class="primary wide" data-act="start" data-id="${next?.id ?? ''}">Start workout</button>`;
+    <button class="primary wide" data-act="start" data-id="${next?.id ?? ''}">${next ? 'Start workout' : 'Start a blank workout'}</button>`;
 }
 
 function todayCard() {

@@ -120,8 +120,27 @@ const SECTIONS = {
     ['Leg curl machine', 'Machine', 'Hamstrings'],
     ['Leg extension', 'Machine', 'Quads'],
     ['Calf raise machine', 'Machine', 'Calves (gastrocnemius, soleus)'],
+    ['Hip abduction machine', 'Machine', 'Glute medius (outer hip)'],
+    ['Hip adduction machine', 'Machine', 'Adductors (inner thigh)'],
+    ['Glute bridge', 'Barbell', 'Glutes, hamstrings'],
+  ],
+  Core: [
+    ['Cable crunch', 'Cable', 'Abs'],
+    ['Ab crunch machine', 'Machine', 'Abs'],
+    ['Hanging leg raise', 'Bodyweight', 'Abs, hip flexors'],
+    ['Lying leg raise', 'Bodyweight', 'Abs, hip flexors'],
+    ['Ab wheel rollout', 'Bodyweight', 'Abs, lats'],
+    ['Decline sit-up', 'Bodyweight', 'Abs, hip flexors'],
+    ['Russian twist', 'Bodyweight', 'Obliques, abs'],
+    ['Pallof press', 'Cable', 'Obliques, abs'],
   ],
 };
+
+// Cardio: [name, equipment]. Logged as minutes and optional km.
+const CARDIO = [
+  ['Treadmill', 'Machine'], ['Exercise bike', 'Machine'], ['Cross trainer', 'Machine'], ['Rowing machine', 'Machine'],
+  ['Stair climber', 'Machine'], ['Walk', 'Outdoors'], ['Run', 'Outdoors'], ['Cycle', 'Outdoors'], ['Swim', 'Pool'],
+];
 
 const slug = name => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
@@ -131,7 +150,7 @@ const AREAS = [
   [/rear delts|rotator cuff/, ['back-deltoids']], [/^delts/, ['front-deltoids', 'back-deltoids']],
   [/tricep/, ['triceps']], [/bicep|brachialis/, ['biceps']], [/brachioradialis|forearm|grip/, ['forearm']],
   [/lats|mid back|rhomboid|upper back/, ['upper-back']], [/traps/, ['trapezius']], [/lower back|erector/, ['lower-back']],
-  [/core/, ['abs', 'obliques']], [/quads/, ['quadriceps']], [/glute|outer hip/, ['gluteal']],
+  [/core/, ['abs', 'obliques']], [/^abs/, ['abs']], [/oblique/, ['obliques']], [/quads/, ['quadriceps']], [/glute|outer hip/, ['gluteal']],
   [/hamstring/, ['hamstring']], [/adductor/, ['abductors', 'abductor']], [/calves|soleus/, ['calves', 'left-soleus', 'right-soleus']],
 ];
 const areasOf = words => [...new Set(words.flatMap(w => AREAS.find(([re]) => re.test(w.toLowerCase()))?.[1] ?? []))];
@@ -154,6 +173,9 @@ function musclesFrom(name, text) {
 export const LIBRARY = Object.entries(SECTIONS).flatMap(([section, items]) => items.map(([name, equipment, muscles]) => ({
   id: `lib-${slug(name)}`, name, type: 'strength', section, equipment, muscles, ...musclesFrom(name, muscles),
   defaultSets: 4, archived: false, library: true,
+}))).concat(CARDIO.map(([name, equipment]) => ({
+  id: `lib-${slug(name)}`, name, type: 'cardio', section: '', equipment, muscles: 'Heart and lungs', primary: [], secondary: [],
+  archived: false, library: true,
 })));
 const BY_ID = new Map(LIBRARY.map(x => [x.id, x]));
 
@@ -184,8 +206,8 @@ export function adopt(id) {
     own.archived = false;
     return own;
   }
-  const { name, section, defaultSets } = BY_ID.get(id);
-  const exercise = { id, name, type: 'strength', section, defaultSets, archived: false };
+  const { name, type, section, defaultSets } = BY_ID.get(id);
+  const exercise = { id, name, type, section, defaultSets, archived: false };
   state.exercises.push(exercise);
   save();
   return exercise;
@@ -209,7 +231,7 @@ export const READY_WORKOUTS = READY_MADE.map(([name, focus, exercises]) => ({
 
 // Saved workouts first, then ready-made ones not yet taken into the user's list.
 export function workoutChoices() {
-  const own = state.workouts.filter(w => !w.archived);
+  const own = state.workouts.filter(w => !w.archived && (!w.programId || w.programId === state.settings.program));
   const taken = new Set(state.workouts.map(w => w.id));
   return [...own, ...READY_WORKOUTS.filter(w => !taken.has(w.id))];
 }
@@ -273,6 +295,14 @@ export const PROGRAMS = PROGRAM_DATA.map(([name, about, guide, days]) => {
     })),
   };
 });
+
+// Stops following: the program's workouts leave the lists, and its planned workout with them.
+export function unfollowProgram() {
+  const planned = state.workouts.find(w => w.id === state.settings.next);
+  if (planned?.programId) state.settings.next = null;
+  state.settings.program = null;
+  save();
+}
 
 // Starts following a program: its workouts join yours and its first workout is planned next.
 export function followProgram(id) {

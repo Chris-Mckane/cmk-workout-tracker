@@ -134,3 +134,14 @@ surviving a real 5 minute lock / app swipe-away / phone restart, and the iOS bac
 - `haptic()` skips vibration until the first real tap (Chrome otherwise logs a console error).
 - `ask()` resolves from the OK click itself, not the dialog `close` event, which waits for a rendered frame.
 - Delete-older never removes the session in progress or a fast still running.
+
+## Review loop 1 (26 Nov 2026)
+- Fixed: editing a fast while another runs no longer closes the sheet as if saved; "1 set" plurals; stopping a program clears its planned workout and hides its workouts; program rotation checks `programId`.
+- Library gains Core (8) and Cardio (9: treadmill, bike, cross trainer, rower, stair climber, walk, run, cycle, swim) plus hip abduction/adduction machines and glute bridge. `adopt` keeps the library type.
+- Effort boxes stay hidden until a set has reps (or is pre-marked), so new cards are calmer.
+- Home tab stays lit on My workouts and Daily log; Home's start button says "Start a blank workout" when nothing is planned; the backup nudge has its own Export button.
+- iPhone export uses the share sheet (download links fail in installed iOS apps).
+- Shared save-sheet handler and Add-exercise path in session.js (less duplicated code).
+- Hold a set circle to fill it (program target, else that set last time, else the set before); hold a filled set to clear it. The first rep ever tapped shows a one-off hint (settings.holdHintSeen). Km labelled optional; clearer effort help line.
+- Summary: "Progress by muscle group" spider chart (js/progress.js). Each spoke is a body section's reps x kg as a % of the previous period (bodyweight sets count reps; 100% dashed ring, 200% edge; up mint, down orange). Tapping a name opens a bar chart of that section over the last 14 days / 8 weeks / 6 months.
+- Training blocks (settings.block { start Monday, weeks 4|6|12 }): with a block the spider chart compares the latest 14 days with the block's first 14 (blockProgress); weeks 1-2 show "Setting your starting point". Tapping a muscle shows one bar per block week; a week in progress is not compared. The chart edge fits the data (at least 150%). Per-exercise progress lines were ruled out by the owner.

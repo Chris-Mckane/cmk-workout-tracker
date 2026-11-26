@@ -25,6 +25,7 @@ let startDate = null;   // date for the next new session when arriving from Dail
 let restOpen = false;
 
 const byId = id => state.sessions.find(s => s.id === id);
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const current = () => byId(openId) ?? byId(state.active?.sessionId) ?? null;
 const isActive = session => state.active?.sessionId === session.id;
 const entryOf = (session, card) => session.entries.find(e => e.exerciseId === card.dataset.ex);
@@ -115,7 +116,7 @@ const setsHtml = entry => entry.reps.map((n, i) => {
   const effort = entry.effort[i];
   return `<div class="set">
     <button class="circle${n ? ' on' : ''}" data-i="${i}" aria-label="Set ${i + 1}: ${n} reps">${n || ''}</button>
-    <button class="effort ${effort ?? ''}" data-act="effort" data-i="${i}" aria-label="${effortLabel(effort, i)}">${EFFORT_LETTERS[effort] ?? '–'}</button>
+    <button class="effort ${effort ?? ''}${n || effort ? '' : ' idle'}" data-act="effort" data-i="${i}" aria-label="${effortLabel(effort, i)}">${EFFORT_LETTERS[effort] ?? '–'}</button>
   </div>`;
 }).join('');
 
@@ -128,7 +129,7 @@ function entryHtml(session, entry) {
       <div class="row" data-legend><h3 class="grow">${name} ${stars}</h3>${remove}</div>
       <div class="row">
         <label>Minutes <input class="num" data-field="minutes" type="number" inputmode="numeric" min="0" step="1" placeholder="0" value="${entry.minutes || ''}"></label>
-        <label>Km <input class="num" data-field="km" type="number" inputmode="decimal" min="0" step="0.1" placeholder="-" value="${entry.km ?? ''}"></label>
+        <label>Km (optional) <input class="num" data-field="km" type="number" inputmode="decimal" min="0" step="0.1" placeholder="-" value="${entry.km ?? ''}"></label>
       </div>
     </article>`;
   }
@@ -161,7 +162,7 @@ function editorHtml(session) {
       <input class="grow" data-field="title" value="${esc(session.title)}" maxlength="40" aria-label="Session title">
       <input type="date" data-field="date" value="${session.date}" aria-label="Session date">
     </div>
-    ${session.entries.some(isStrength) ? `<p class="muted small effort-help">Effort, tap under a set: W warm up · M maintenance · F fatigue · <span class="effort-key">${ARM}</span> failure</p>` : ''}
+    ${session.entries.some(isStrength) ? `<p class="muted small effort-help">Tap a set for each rep, or hold it to fill the set (hold again to clear). Then rate how hard it was in the box underneath: W warm-up · M maintenance (comfortable) · F fatigue (1 or 2 reps left) · <span class="effort-key">${ARM}</span> failure (no more reps).</p>` : ''}
     <div data-drag-list="entries">${session.entries.map(entry => entryHtml(session, entry)).join('')}</div>
     <button class="wide" data-act="add-exercise">+ Add exercise</button>
     ${session.entries.length ? '<button class="wide" data-act="save-workout">Save as workout</button>' : ''}
@@ -194,7 +195,7 @@ function savedHtml() {
     return `<li class="vibe-line ${s.vibe ?? ''}" data-id="${s.id}"><button class="open" data-act="open">
         <b>${esc(s.title || 'Session')}</b>
         ${done.length ? `<span class="small">${esc(done.join(' · '))}</span>` : ''}
-        <span class="muted small">${fmtDay(s.date, true)} · ${sets} sets, ${reps} reps · ${status}</span>
+        <span class="muted small">${fmtDay(s.date, true)} · ${plural(sets, 'set')}, ${plural(reps, 'rep')} · ${status}</span>
         ${s.note ? `<span class="muted small clip">${esc(s.note)}</span>` : ''}
       </button><button class="ghost" data-act="delete" aria-label="Delete session">✕</button></li>`;
   };
@@ -232,6 +233,15 @@ function refreshEntry(card, session, entry) {
   placeLegend(root);
 }
 
+// The reps a hold fills a set with: the program target, else that set last time,
+// else the set before it in this session.
+function fillReps(session, entry, i) {
+  const target = targetOf(session, entry.exerciseId);
+  const skip = target?.warmup ?? 0;
+  const { last } = history.get(session.id).get(entry.exerciseId);
+  return (i >= skip && target?.reps[i - skip]) || last?.allReps?.[i] || entry.reps[i - 1] || 0;
+}
+
 function changeReps(circle, change) {
   const card = circle.closest('.entry'), session = current(), entry = entryOf(session, card);
   const i = Number(circle.dataset.i), was = entry.reps[i], now = change(was);
@@ -239,6 +249,7 @@ function changeReps(circle, change) {
   circle.textContent = now || '';
   circle.classList.toggle('on', now > 0);
   circle.setAttribute('aria-label', `Set ${i + 1}: ${now} reps`);
+  circle.nextElementSibling.classList.toggle('idle', !now && !entry.effort[i]);
   refreshEntry(card, session, entry);
   save();
   // Every added rep (re)starts the rest countdown, so it runs from the last rep of the set.
@@ -273,12 +284,8 @@ function pickExercise(session) {
     }
     const id = e.target.closest('[data-id]')?.dataset.id;
     if (!id) return;
-    const entry = newEntry(adopt(id));
-    session.entries.push(entry);
-    prefillKg(session, [entry]);
-    save();
     sheet.close();
-    render();
+    add(adopt(id));
   });
 }
 
@@ -315,10 +322,8 @@ function saveStructure(e, sheet, session) {
   return workout;
 }
 
-// Mid-session: save the workout built so far, so it can be reused.
-function saveAsWorkout(session) {
-  const sheet = openSheet(`<h2>Save as workout</h2>${saveFormHtml(session)}
-    <div class="row end"><button class="ghost" data-close>Cancel</button></div>`);
+// Wires a sheet holding the save controls: saving closes it and re-renders.
+function onSaveStructure(sheet, session) {
   sheet.addEventListener('click', e => {
     const workout = saveStructure(e, sheet, session);
     if (!workout) return;
@@ -329,23 +334,21 @@ function saveAsWorkout(session) {
   });
 }
 
+// Mid-session: save the workout built so far, so it can be reused.
+function saveAsWorkout(session) {
+  onSaveStructure(openSheet(`<h2>Save as workout</h2>${saveFormHtml(session)}
+    <div class="row end"><button class="ghost" data-close>Cancel</button></div>`), session);
+}
+
 // After Finish: if the exercises differ from the workout they came from (or there was none),
 // offer to save the structure. Planning the next workout is left to Home.
 function finishSheet(session) {
   const exerciseIds = session.entries.map(x => x.exerciseId);
   const unchanged = templateOf(session)?.exerciseIds.join() === exerciseIds.join();
   if (!exerciseIds.length || unchanged) return tip('Workout saved');
-  const sheet = openSheet(`<h2>Workout finished</h2>
-    <section class="step"><h3>Save this workout's structure?</h3>${saveFormHtml(session)}</section>
-    <div class="row end"><button class="ghost" data-close>Not now</button></div>`);
-  sheet.addEventListener('click', e => {
-    const workout = saveStructure(e, sheet, session);
-    if (!workout) return;
-    save();
-    sheet.close();
-    tip(`Saved workout "${workout.name}"`);
-    render();
-  });
+  onSaveStructure(openSheet(`<h2>Workout finished</h2>
+    <section class="step"><h3>Save these exercises as a workout?</h3>${saveFormHtml(session)}</section>
+    <div class="row end"><button class="ghost" data-close>Not now</button></div>`), session);
 }
 
 async function deleteSession(id) {
@@ -383,7 +386,7 @@ async function onClick(e) {
       return deleteSession(btn.closest('li').dataset.id);
     case 'finish':
       // Following a program: its next workout is planned automatically.
-      if (session.workoutId?.startsWith(`${state.settings.program}-`)) state.settings.next = nextInProgram(PROGRAMS, session.workoutId);
+      if (state.settings.program && templateOf(session)?.programId === state.settings.program) state.settings.next = nextInProgram(PROGRAMS, session.workoutId);
       timers.finishActive();
       openId = null;
       render();
@@ -435,7 +438,7 @@ async function onClick(e) {
       const i = Number(btn.dataset.i);
       const effort = EFFORTS[(EFFORTS.indexOf(entry.effort[i]) + 1) % EFFORTS.length];
       entry.effort[i] = effort;
-      btn.className = `effort ${effort ?? ''}`;
+      btn.className = `effort ${effort ?? ''}${effort || entry.reps[i] ? '' : ' idle'}`;
       btn.innerHTML = EFFORT_LETTERS[effort] ?? '–';
       btn.setAttribute('aria-label', effortLabel(effort, i));
       tip(`Set ${i + 1}: ${EFFORT_NAMES[effort] ?? 'no effort set'}`);
@@ -492,10 +495,19 @@ export function init(el) {
     tap: circle => {
       haptic('tap');
       changeReps(circle, n => n + 1);
+      if (state.settings.holdHintSeen) return;
+      state.settings.holdHintSeen = true;
+      save();
+      tip('Tip: hold a set to fill it in one go');
     },
     long: circle => {
       haptic('long');
-      changeReps(circle, () => 0);
+      const entry = entryOf(current(), circle.closest('.entry'));
+      const i = Number(circle.dataset.i);
+      if (entry.reps[i]) return changeReps(circle, () => 0);
+      const reps = fillReps(current(), entry, i);
+      if (!reps) return tip('Nothing to copy yet: tap once per rep');
+      changeReps(circle, () => reps);
     },
   });
 }

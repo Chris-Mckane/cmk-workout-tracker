@@ -1,12 +1,12 @@
 // Pure derived maths: nothing here is stored, everything is computed from state.
 
-import { datesBetween, dateOfIso, secondsBetween } from './time.js';
+import { datesBetween, dateOfIso, secondsBetween, addDays } from './time.js';
 
 export const isStrength = entry => Array.isArray(entry.reps);
 
 // Weight sections in body order, top to bottom. Sections the user makes up come next (A to Z),
 // then weight exercises with no section, then all cardio as one section.
-const BODY_SECTIONS = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Core'];
+export const BODY_SECTIONS = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Core'];
 const OTHER = 'Other', CARDIO = 'Cardio';
 const sectionOf = x => (x.type === 'cardio' ? CARDIO : x.section?.trim() || OTHER);
 const rank = section => {
@@ -177,7 +177,40 @@ export const dayType = (days, date, hasSession) => days[date]?.type ?? (hasSessi
 
 const sum = list => list.reduce((a, b) => a + b, 0);
 
-// Totals for every date from `from` to `to` (a day, a Mon-Sun week or a month).
+// Weight volume (reps x kg) per body section from `from` to `to`. Bodyweight sets (0 kg)
+// count their reps, so core work still shows. Cardio and made-up sections are left out.
+export function sectionVolume(state, from, to) {
+  const sectionOf = new Map(state.exercises.map(x => [x.id, x.section]));
+  const totals = Object.fromEntries(BODY_SECTIONS.map(s => [s, 0]));
+  for (const session of state.sessions) {
+    if (session.date < from || session.date > to) continue;
+    for (const entry of session.entries) {
+      const section = isStrength(entry) && sectionOf.get(entry.exerciseId);
+      if (section in totals) totals[section] += measure(entry).reps * Math.max(entry.kg, 1);
+    }
+  }
+  return totals;
+}
+
+// This period as a percentage of the last, per section: null when neither has any,
+// Infinity when only this period has some.
+export const percentOf = (now, before) => Object.fromEntries(Object.keys(now).map(s => [s,
+  before[s] ? Math.round((now[s] / before[s]) * 100) : now[s] ? Infinity : null]));
+
+// A training block { start (a Monday), weeks } on a given date: its week number and the
+// windows the spider chart compares: the first 14 days set the starting point, and from
+// day 15 the latest 14 days are compared with it. Both windows are always 14 days long.
+export function blockProgress(block, on) {
+  const end = addDays(block.start, block.weeks * 7 - 1);
+  const last = on < end ? on : end;
+  const day = datesBetween(block.start, last).length;
+  return {
+    end, done: on > end, week: Math.ceil(day / 7),
+    base: [block.start, addDays(block.start, 13)],
+    recent: day > 14 ? [addDays(last, -13), last] : null,
+  };
+}
+
 // Muscle areas worked by the logged weight exercises in some sessions. An area counts as
 // primary if any exercise led with it.
 export function musclesTrained(sessions, musclesOf, exercises) {
@@ -195,6 +228,7 @@ export function musclesTrained(sessions, musclesOf, exercises) {
   return { primary: [...primary], secondary: [...secondary].filter(a => !primary.has(a)) };
 }
 
+// Totals for every date from `from` to `to` (a day, a Mon-Sun week or a month).
 export function periodStats(state, from, to, history = buildHistory(state.sessions)) {
   const dates = datesBetween(from, to);
   const inPeriod = date => date >= from && date <= to;

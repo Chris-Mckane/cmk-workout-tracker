@@ -3,7 +3,7 @@
 import { state, save, uid } from './store.js';
 import { esc, sectionsHtml, enableDrag, GRIP, openSheet, ask, tip, go } from './ui.js';
 import { groupBySection, sectionNames, matchSection, catalogue, applyOrder } from './stats.js';
-import { LIBRARY, adopt, detailOf, libraryEntry, musclesOf, READY_WORKOUTS, PROGRAMS, followProgram } from './library.js';
+import { LIBRARY, adopt, detailOf, libraryEntry, musclesOf, READY_WORKOUTS, PROGRAMS, followProgram, unfollowProgram } from './library.js';
 import { muscleMapHtml } from './muscles.js';
 import { startSession } from './session.js';
 
@@ -182,8 +182,7 @@ async function onClick(e) {
     }
     case 'learn': return programGuide(PROGRAMS.find(x => x.id === btn.closest('[data-program]').dataset.program));
     case 'unfollow':
-      state.settings.program = null;
-      save();
+      unfollowProgram();
       break;
     case 'edit': {
       const w = state.workouts.find(x => x.id === id);

@@ -3,7 +3,8 @@
 
 import { state, save, replaceState, migrate } from './store.js';
 import { today, weekStart, addDays, weekLabel, fmtDay, fmtHM, dateOfIso, daysSince, monthStart, monthEnd, addMonths, monthLabel, parseDate } from './time.js';
-import { periodStats, tidyExercises, musclesTrained } from './stats.js';
+import { periodStats, tidyExercises, musclesTrained, sectionVolume, percentOf, blockProgress } from './stats.js';
+import { radarHtml, openHistory } from './progress.js';
 import { LIBRARY, musclesOf } from './library.js';
 import { muscleMapHtml } from './muscles.js';
 import { esc, fmtNum, starsHtml, placeLegend, openSheet, ask, isIOS } from './ui.js';
@@ -15,9 +16,10 @@ const NUDGE_DAYS = isIOS ? 7 : 14;
 
 // How each period finds its dates, steps back and forward, and names itself.
 const PERIODS = {
-  day: { label: 'Day', range: d => [d, d], step: (d, n) => addDays(d, n), title: d => fmtDay(d, true), noun: 'today' },
-  week: { label: 'Week', range: d => [weekStart(d), addDays(weekStart(d), 6)], step: (d, n) => addDays(d, 7 * n), title: d => weekLabel(weekStart(d)), noun: 'this week' },
-  month: { label: 'Month', range: d => [monthStart(d), monthEnd(d)], step: addMonths, title: monthLabel, noun: 'this month' },
+  day: { label: 'Day', range: d => [d, d], step: (d, n) => addDays(d, n), title: d => fmtDay(d, true), noun: 'today', last: 'the day before', bars: 14, short: d => String(parseDate(d).getDate()) },
+  week: { label: 'Week', range: d => [weekStart(d), addDays(weekStart(d), 6)], step: (d, n) => addDays(d, 7 * n), title: d => weekLabel(weekStart(d)), noun: 'this week', last: 'last week', bars: 8,
+    short: d => { const s = parseDate(weekStart(d)); return `${s.getDate()}/${s.getMonth() + 1}`; } },
+  month: { label: 'Month', range: d => [monthStart(d), monthEnd(d)], step: addMonths, title: monthLabel, noun: 'this month', last: 'last month', bars: 6, short: d => monthLabel(d).slice(0, 3) },
 };
 
 let root;
@@ -35,7 +37,8 @@ function nudgeHtml() {
   const { lastExport, nudgeDismissedAt } = state.settings;
   const hasLogs = state.sessions.length + state.sleep.length + state.fasts.length > 0;
   if (!hasLogs || Math.min(daysSince(lastExport), daysSince(nudgeDismissedAt)) <= NUDGE_DAYS) return '';
-  return `<div class="card notice row"><span class="grow">${lastExport ? `Your last backup is over ${NUDGE_DAYS} days old.` : 'You have no backup yet.'} Export one from settings (the cog, top right).</span>
+  return `<div class="card notice row"><span class="grow">${lastExport ? `Your last backup is over ${NUDGE_DAYS} days old.` : 'You have no backup yet.'}</span>
+    <button data-act="nudge-export">Export</button>
     <button class="ghost" data-act="nudge-dismiss" aria-label="Dismiss">✕</button></div>`;
 }
 
@@ -64,6 +67,62 @@ function daysHtml(w) {
   const [d] = w.days;
   return `<p class="row"><b class="day-${d.type}">${d.type ? `${d.type === 'rest' ? 'Rest' : 'Workout'} day` : 'Day type not set'}</b>
     <span class="grow"></span><span class="muted small">Nutrition</span>${dot(d.nutrition, `Nutrition ${d.nutrition ?? 'not rated'}`)}</p>`;
+}
+
+// Volume per muscle group against the period before; tapping a group opens its history.
+const BLOCK_WEEKS = [4, 6, 12];
+const blockButtons = label => `<div class="row">${BLOCK_WEEKS.map(n => `<button class="grow" data-act="block" data-weeks="${n}">${n} weeks</button>`).join('')}</div>
+  <p class="muted small">${label}</p>`;
+
+// With a training block, the spider chart tracks it: the latest 14 days against the first 14.
+// Without one, it compares the period on screen with the one before, and offers a block.
+function progressHtml(p) {
+  const block = state.settings.block;
+  if (!block) return `${periodProgressHtml(p)}<section class="card center"><h2>Track a training block</h2>
+    <p class="muted small">Commit to 4, 6 or 12 weeks. The spider chart then shows how each muscle group grows from where you started.</p>
+    ${blockButtons('Starts this Monday.')}</section>`;
+  const b = blockProgress(block, today());
+  const head = `<h2>${b.done ? 'Block complete' : `Week ${b.week} of ${block.weeks}`}</h2>
+    <p class="muted small">${block.weeks}-week block · ${fmtDay(block.start)} to ${fmtDay(b.end)}</p>`;
+  const end = b.done ? blockButtons('Start your next block.') : '<button class="ghost small" data-act="block-end">End block</button>';
+  if (!b.recent) {
+    return `<section class="card center">${head}
+      <p>Setting your starting point: week ${b.week} of 2.</p>
+      <p class="muted small">Train as normal. From week 3 the spider chart shows each muscle group against these first two weeks.</p>${end}</section>`;
+  }
+  const base = sectionVolume(state, ...b.base);
+  const recent = sectionVolume(state, ...b.recent);
+  return `<section class="card center">${head}
+    <p class="muted small">Reps × kg in your ${b.done ? 'last' : 'latest'} 2 weeks as a % of your first 2. Dashed ring = where you started. Tap a muscle for each week.</p>
+    ${radarHtml(percentOf(recent, base), 'your first 2 weeks')}${end}</section>`;
+}
+
+function periodProgressHtml(p) {
+  const now = sectionVolume(state, ...p.range(anchor));
+  const before = sectionVolume(state, ...p.range(p.step(anchor, -1)));
+  if (![...Object.values(now), ...Object.values(before)].some(Boolean)) return '';
+  return `<section class="card center"><h2>Progress by muscle group</h2>
+    <p class="muted small">Reps × kg ${p.noun} as a % of ${p.last}. Dashed ring = the same. Tap a muscle for its history.</p>
+    ${radarHtml(percentOf(now, before), p.last)}</section>`;
+}
+
+function showHistory(section) {
+  const block = state.settings.block;
+  if (block) {
+    const b = blockProgress(block, today());
+    const bars = Array.from({ length: block.weeks }, (_, i) => {
+      const from = addDays(block.start, 7 * i);
+      return { label: `W${i + 1}`, value: sectionVolume(state, from, addDays(from, 6))[section] };
+    });
+    // A week still in progress is not compared, so a Monday never looks like a drop.
+    return openHistory(section, bars, b.week - 1, `week ${b.week}${b.done ? '' : ' so far'}`, b.done && 'the week before');
+  }
+  const p = PERIODS[period];
+  const bars = Array.from({ length: p.bars }, (_, i) => {
+    const at = p.step(anchor, i - p.bars + 1);
+    return { label: p.short(at), value: sectionVolume(state, ...p.range(at))[section] };
+  });
+  openHistory(section, bars, bars.length - 1, p.noun, p.last);
 }
 
 function trainedHtml(p) {
@@ -97,6 +156,7 @@ function render() {
       <div data-legend><b>${plural(w.pbs.length, 'Personal Best')} ${p.noun}</b> ${starsHtml(w.pbs)}</div>
       <div class="row"><span class="muted small">Vibe</span>${w.vibes.map(v => dot(v, `Session vibe: ${v ?? 'not rated'}`)).join('') || '<span class="muted small">no sessions</span>'}</div>
     </section>
+    ${progressHtml(p)}
     ${trainedHtml(p)}
     <section class="card"><h2>${period === 'day' ? 'Day' : 'Days'}</h2>${daysHtml(w)}</section>
     <section class="card"><h2>By workout</h2>
@@ -112,12 +172,23 @@ function render() {
 
 // --- Settings ---
 
-function exportBackup() {
+async function exportBackup() {
+  const name = `cmk-workouts-${today()}.json`;
+  const file = new File([JSON.stringify(state)], name, { type: 'application/json' });
+  if (isIOS && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+    } catch {
+      return 'Backup not saved.';
+    }
+  } else {
+    const url = URL.createObjectURL(file);
+    Object.assign(document.createElement('a'), { href: url, download: name }).click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
   state.settings.lastExport = new Date().toISOString();
   save();
-  const url = URL.createObjectURL(new Blob([JSON.stringify(state)], { type: 'application/json' }));
-  Object.assign(document.createElement('a'), { href: url, download: `cmk-workouts-${today()}.json` }).click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return 'Backup exported.';
 }
 
 async function importBackup(file) {
@@ -167,7 +238,7 @@ export function openSettings() {
   };
   sheet.addEventListener('click', async e => {
     switch (e.target.closest('[data-act]')?.dataset.act) {
-      case 'export': exportBackup(); return report('Backup exported.');
+      case 'export': return report(await exportBackup());
       case 'import': return file.click();
       case 'delete-older': return report(await deleteOlder(sheet.querySelector('[data-field="before"]').value));
     }
@@ -184,11 +255,27 @@ export function openSettings() {
 }
 
 function onClick(e) {
+  const muscle = e.target.closest('[data-section]')?.dataset.section;
+  if (muscle) return showHistory(muscle);
+  if (e.target.closest('[data-act="block"]')) {
+    state.settings.block = { start: weekStart(today()), weeks: Number(e.target.closest('[data-weeks]').dataset.weeks) };
+    save();
+    return render();
+  }
+  if (e.target.closest('[data-act="block-end"]')) {
+    return ask('End this training block? Your workouts stay; only the block tracking stops.', 'End block').then(yes => {
+      if (!yes) return;
+      state.settings.block = null;
+      save();
+      render();
+    });
+  }
   const btn = e.target.closest('[data-act]');
   switch (btn?.dataset.act) {
     case 'period': period = btn.dataset.period; return render();
     case 'prev': anchor = PERIODS[period].step(anchor, -1); return render();
     case 'next': anchor = PERIODS[period].step(anchor, 1); return render();
+    case 'nudge-export': return exportBackup().then(render);
     case 'nudge-dismiss':
       state.settings.nudgeDismissedAt = new Date().toISOString();
       save();

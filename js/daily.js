@@ -55,7 +55,10 @@ export function editFastTimes(fast, done) {
   timesSheet({
     title: 'Edit fast time', startLabel: 'Started', endLabel: 'Ended', start: fast.start, end: fast.end, endOptional: true,
     onSave: (start, end) => {
-      if (!end && runningFast() && runningFast() !== fast) return tip('Another fast is already in progress') && false;
+      if (!end && runningFast() && runningFast() !== fast) {
+        tip('Another fast is already in progress');
+        return false;
+      }
       Object.assign(fast, { start, end });
       done();
     },

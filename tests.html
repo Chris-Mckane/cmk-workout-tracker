@@ -15,7 +15,7 @@
   <ol id="results"></ol>
   <script type="module">
     import * as T from './js/time.js';
-    import { measure, pbsOf, buildHistory, sessionSummary, dayType, periodStats, groupBySection, sectionNames, matchSection, doneNames, catalogue, applyOrder, plannedWorkout, nameKey, guessSection, tidyExercises, musclesTrained, suggestKg, nextInProgram } from './js/stats.js';
+    import { measure, pbsOf, buildHistory, sessionSummary, dayType, periodStats, groupBySection, sectionNames, matchSection, doneNames, catalogue, applyOrder, plannedWorkout, nameKey, guessSection, tidyExercises, musclesTrained, suggestKg, nextInProgram, sectionVolume, percentOf, blockProgress } from './js/stats.js';
     import { LIBRARY, musclesOf, READY_WORKOUTS, PROGRAMS } from './js/library.js';
     import { migrate, defaultState, VERSION } from './js/store.js';
     import { toggleValue } from './js/ui.js';
@@ -136,6 +136,31 @@
     eq([day.totals.sessions, day.totals.reps, day.days.length, day.days[0].type], [1, 40, 1, 'rest'], 'a one-day summary covers just that date');
     const month = periodStats(state, '2026-11-01', '2026-11-30');
     eq([month.totals.sessions, month.days.length, month.fasts.count], [4, 30, 2], 'a month summary covers every date in it');
+    {
+      const vs = {
+        exercises: [{ id: 'sq', type: 'strength', section: 'Legs' }, { id: 'lr', type: 'strength', section: 'Core' }, { id: 'run', type: 'cardio', section: '' }],
+        sessions: [
+          { date: '2026-11-16', entries: [{ exerciseId: 'sq', kg: 100, reps: [5, 5] }, { exerciseId: 'lr', kg: 0, reps: [10] }, { exerciseId: 'run', minutes: 20, km: 3 }] },
+          { date: '2026-11-23', entries: [{ exerciseId: 'sq', kg: 100, reps: [6, 6] }] },
+        ],
+      };
+      const a = sectionVolume(vs, '2026-11-16', '2026-11-22'), b = sectionVolume(vs, '2026-11-23', '2026-11-29');
+      eq([a.Legs, a.Core, a.Chest, 'Cardio' in a], [1000, 10, 0, false], 'section volume: reps x kg, bodyweight counts reps, cardio left out');
+      eq(percentOf(b, a), { ...Object.fromEntries(Object.keys(a).map(s => [s, null])), Legs: 120, Core: 0 }, 'percent of last period: 120%, dropped to 0, none either side is null');
+      const fresh = percentOf(a, { Legs: 0, Core: 0 });
+      eq([fresh.Legs === Infinity, fresh.Core === Infinity, fresh.Chest], [true, true, null], 'new this period is Infinity');
+    }
+    {
+      const block = { start: '2026-11-02', weeks: 6 };
+      const early = blockProgress(block, '2026-11-10');
+      eq([early.week, early.done, early.recent], [2, false, null], 'block weeks 1-2 set the starting point, nothing to compare yet');
+      const mid = blockProgress(block, '2026-11-17');
+      eq([mid.week, mid.base, mid.recent], [3, ['2026-11-02', '2026-11-15'], ['2026-11-04', '2026-11-17']], 'from week 3, the latest 14 days against the first 14');
+      const late = blockProgress(block, '2026-12-05');
+      eq([late.week, late.recent], [5, ['2026-11-22', '2026-12-05']], 'later on, the latest 14 days');
+      const over = blockProgress(block, '2026-12-20');
+      eq([over.done, over.week, over.end, over.recent], [true, 6, '2026-12-13', ['2026-11-30', '2026-12-13']], 'a finished block shows its last 14 days');
+    }
     eq(dayType({}, '2026-11-16', true), 'workout', 'a date with a session is a workout day');
     eq(dayType({}, '2026-11-16', false), null, 'no session and no override: unset');
     eq(dayType({ '2026-11-16': { type: 'rest' } }, '2026-11-16', true), 'rest', 'the stored override wins');
@@ -178,7 +203,9 @@
     const libEx = name => LIBRARY.find(x => x.name === name);
     eq(musclesOf(libEx('Lat pulldown')), { primary: ['upper-back'], secondary: ['biceps', 'back-deltoids', 'trapezius'] }, 'lat pulldown: lats lead, arms and shoulders support');
     eq(musclesOf(libEx('Romanian deadlift')), { primary: ['hamstring', 'gluteal'], secondary: ['lower-back'] }, 'Romanian deadlift: hamstrings and glutes lead');
-    eq(LIBRARY.every(x => x.primary.length > 0), true, 'every library exercise has a main muscle');
+    const libWeights = LIBRARY.filter(x => x.type === 'strength'), libCardio = LIBRARY.filter(x => x.type === 'cardio');
+    eq(libWeights.every(x => x.primary.length > 0), true, 'every library weight exercise has a main muscle');
+    eq(libCardio.length > 0 && libCardio.every(x => !x.section && x.equipment), true, 'library cardio has no section and lists equipment');
     eq(musclesOf({ id: 'mine', section: 'Triceps' }), { primary: ['triceps'], secondary: [] }, 'your own exercise uses its folder');
     const trained = musclesTrained([session('m1', '2026-11-20', [strength(libEx('Lat pulldown').id, 50, [10]), strength(libEx('Barbell curl').id, 30, [0])])], musclesOf, [libEx('Lat pulldown'), libEx('Barbell curl')]);
     eq(trained, { primary: ['upper-back'], secondary: ['biceps', 'back-deltoids', 'trapezius'] }, 'muscles trained counts only exercises with reps logged');
@@ -202,7 +229,7 @@
 
     // --- Exercise library ---
     eq(new Set(LIBRARY.map(x => x.id)).size, LIBRARY.length, 'library ids are unique');
-    eq(LIBRARY.every(x => x.muscles && x.equipment && ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs'].includes(x.section)), true, 'every library exercise has a section, equipment and muscles');
+    eq(LIBRARY.filter(x => x.type === 'strength').every(x => x.muscles && x.equipment && ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Core'].includes(x.section)), true, 'every library weight exercise has a section, equipment and muscles');
     eq(['Leg press', 'Hack squat', 'Leg curl machine', 'Leg extension', 'Calf raise machine', 'Pec fly machine', 'Reverse fly machine (rear delts)', 'Seated row machine', 'EZ-bar preacher curl'].every(n => LIBRARY.some(x => x.name === n)), true, 'the gym machines are all in the library');
     const libA = { ...LIBRARY[0], library: true }, libB = LIBRARY[1];
     const mine = [{ ...ex('My curl', 'Biceps') }, { id: libA.id, name: 'Bench', type: 'strength', section: 'Chest', defaultSets: 5, archived: false }, { id: libB.id, name: libB.name, type: 'strength', section: 'Chest', defaultSets: 4, archived: true }];
