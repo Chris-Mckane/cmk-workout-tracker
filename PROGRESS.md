@@ -147,3 +147,8 @@ surviving a real 5 minute lock / app swipe-away / phone restart, and the iOS bac
 - Training blocks (settings.block { start Monday, weeks 4|6|12 }): with a block the spider chart compares the latest 14 days with the block's first 14 (blockProgress); weeks 1-2 show "Setting your starting point". Tapping a muscle shows one bar per block week; a week in progress is not compared. The chart edge fits the data (at least 150%). Per-exercise progress lines were ruled out by the owner.
 - Blocks start on a date the user picks (any day, past or future; upcoming until then) and show a progress bar (Day N of total). Muscles trained always covers the Monday-to-Sunday week being viewed and starts fresh each Monday.
 - Block spider builds from day one: week 1 shows each muscle group in kg (its own shape, the starting point); from week 2 the current block week so far is a % of week 1, dashed ring = week 1. A week in progress never shows under-100% as down; only finished weeks do. Block weeks run 7 days from the chosen start date.
+
+## CMK-GymApp (26 Nov 2026)
+- Renamed to CMK-GymApp (title, header, manifest, backups now cmk-gymapp-DATE.json). Storage key stays cmk-wt so existing data carries over.
+- Icons renamed cmk-gymapp-192/512.png so installed phones fetch the logo afresh.
+- Settings > Theme: Dark, Light or Match my phone (settings.theme, data-theme on <html>, light tokens in styles.css).

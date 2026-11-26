@@ -13,7 +13,7 @@ export const defaultState = () => ({
   fasts: [],
   bedtime: null,  // ISO time the Sleep button was tapped; null when awake
   active: null,
-  settings: { restSec: 90, lastExport: null, nudgeDismissedAt: null, iosCardSeen: false, next: null, program: null, todayOpen: false, holdHintSeen: false, block: null, order: { sections: [], exercises: [], home: [] } },
+  settings: { restSec: 90, lastExport: null, nudgeDismissedAt: null, iosCardSeen: false, next: null, program: null, todayOpen: false, holdHintSeen: false, block: null, theme: 'dark', order: { sections: [], exercises: [], home: [] } },
 });
 
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -22,7 +22,7 @@ const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 // Each version's upgrade step runs in order, oldest first.
 export function migrate(raw) {
   if (!isObject(raw) || !Number.isInteger(raw.version) || raw.version < 1 || raw.version > VERSION) {
-    throw new Error('Not a CMK Workout Tracker backup');
+    throw new Error('Not a CMK-GymApp backup');
   }
   const base = defaultState();
   const next = { ...base, ...raw, settings: { ...base.settings, ...raw.settings }, version: VERSION };

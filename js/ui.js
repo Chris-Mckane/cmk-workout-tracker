@@ -8,6 +8,15 @@ export function setText(el, text) {
   if (el.textContent !== text) el.textContent = text;
 }
 
+// Dark, light, or 'auto' to match the phone. Also tints the phone's status bar.
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+export function applyTheme(theme) {
+  const light = theme === 'light' || (theme === 'auto' && !darkQuery.matches);
+  document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  document.querySelector('meta[name="theme-color"]').content = light ? '#eef3f6' : '#0b1218';
+}
+export const onPhoneTheme = fn => darkQuery.addEventListener('change', fn);
+
 export const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 

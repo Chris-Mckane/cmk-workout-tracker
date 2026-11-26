@@ -1,7 +1,7 @@
 // App shell: boot, bottom nav, the display ticker, and app-wide tap behaviour.
 
 import { state, load, save, flush } from './store.js';
-import { haptic, tip, isIOS, filterSections, rememberSection } from './ui.js';
+import { haptic, tip, isIOS, filterSections, rememberSection, applyTheme, onPhoneTheme } from './ui.js';
 import { today } from './time.js';
 import { tidyExercises } from './stats.js';
 import { LIBRARY } from './library.js';
@@ -90,6 +90,8 @@ window.addEventListener('pagehide', flush);
 load();
 tidyExercises(state, LIBRARY);
 save();
+applyTheme(state.settings.theme);
+onPhoneTheme(() => applyTheme(state.settings.theme));
 for (const [name, screen] of Object.entries(screens)) screen.init(document.getElementById(name));
 show(state.active ? 'session' : 'home');
 showIosCard();

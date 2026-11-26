@@ -7,7 +7,7 @@ import { periodStats, tidyExercises, musclesTrained, sectionVolume, percentOf, b
 import { radarHtml, openHistory } from './progress.js';
 import { LIBRARY, musclesOf } from './library.js';
 import { muscleMapHtml } from './muscles.js';
-import { esc, fmtNum, starsHtml, placeLegend, openSheet, ask, isIOS } from './ui.js';
+import { esc, fmtNum, starsHtml, placeLegend, openSheet, ask, isIOS, applyTheme } from './ui.js';
 import { REST_PRESETS } from './timers.js';
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -179,7 +179,7 @@ function render() {
 // --- Settings ---
 
 async function exportBackup() {
-  const name = `cmk-workouts-${today()}.json`;
+  const name = `cmk-gymapp-${today()}.json`;
   const file = new File([JSON.stringify(state)], name, { type: 'application/json' });
   if (isIOS && navigator.canShare?.({ files: [file] })) {
     try {
@@ -203,7 +203,7 @@ async function importBackup(file) {
     next = migrate(JSON.parse(await file.text()));
     tidyExercises(next, LIBRARY);
   } catch {
-    return 'That file is not a CMK Workout Tracker backup.';
+    return 'That file is not a CMK-GymApp backup.';
   }
   const confirmed = await ask(`Replace everything on this phone with this backup (${next.sessions.length} sessions)?`, 'Replace');
   if (!confirmed) return '';
@@ -235,6 +235,8 @@ export function openSettings() {
     <label>Delete logs older than <input type="date" data-field="before"></label>
     <button class="wide danger" data-act="delete-older">Delete older logs</button>
     <label>Rest timer default <select data-field="rest">${REST_PRESETS.map(option).join('')}</select></label>
+    <label>Theme <select data-field="theme">${[['dark', 'Dark'], ['light', 'Light'], ['auto', 'Match my phone']].map(([v, label]) =>
+      `<option value="${v}"${v === state.settings.theme ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
     <p class="muted small" role="status" data-msg></p>
     <div class="row end"><button class="ghost" data-close>Close</button></div>`);
   const file = sheet.querySelector('[type="file"]');
@@ -253,6 +255,10 @@ export function openSettings() {
     if (e.target === file && file.files[0]) {
       report(await importBackup(file.files[0]));
       file.value = '';
+    } else if (e.target.dataset.field === 'theme') {
+      state.settings.theme = e.target.value;
+      save();
+      applyTheme(state.settings.theme);
     } else if (e.target.dataset.field === 'rest') {
       state.settings.restSec = Number(e.target.value);
       save();

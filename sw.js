@@ -1,7 +1,7 @@
 // Cache-first service worker. Bump CACHE whenever any app file changes so phones pick up the new version.
-const CACHE = 'cmk-wt-v50';
+const CACHE = 'cmk-wt-v52';
 const FILES = [
-  './', 'index.html', 'styles.css', 'manifest.json', 'icon.svg', 'app-icon-192.png', 'app-icon-512.png',
+  './', 'index.html', 'styles.css', 'manifest.json', 'icon.svg', 'cmk-gymapp-192.png', 'cmk-gymapp-512.png',
   'js/app.js', 'js/store.js', 'js/time.js', 'js/stats.js', 'js/ui.js', 'js/timers.js',
   'js/session.js', 'js/workouts.js', 'js/daily.js', 'js/summary.js', 'js/library.js', 'js/home.js', 'js/muscles.js', 'js/progress.js',
 ];

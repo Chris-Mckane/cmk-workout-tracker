@@ -1,4 +1,4 @@
-# Draws app-icon-192.png and app-icon-512.png to match icon.svg (same shapes on a 512 grid).
+# Draws cmk-gymapp-192.png and cmk-gymapp-512.png to match icon.svg (same shapes on a 512 grid).
 # Run from Windows PowerShell:  powershell -ExecutionPolicy Bypass -File make-icons.ps1
 Add-Type -AssemblyName System.Drawing
 
@@ -52,6 +52,6 @@ foreach ($size in 192, 512) {
     $path.Dispose()
   }
   $g.Dispose()
-  $bitmap.Save((Join-Path $PSScriptRoot "app-icon-$size.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+  $bitmap.Save((Join-Path $PSScriptRoot "cmk-gymapp-$size.png"), [System.Drawing.Imaging.ImageFormat]::Png)
   $bitmap.Dispose()
 }
