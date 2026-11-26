@@ -1,5 +1,5 @@
 // Cache-first service worker. Bump CACHE whenever any app file changes so phones pick up the new version.
-const CACHE = 'cmk-wt-v53';
+const CACHE = 'cmk-wt-v54';
 const FILES = [
   './', 'index.html', 'styles.css', 'manifest.json', 'icon.svg', 'cmk-gymapp-192.png', 'cmk-gymapp-512.png',
   'js/app.js', 'js/store.js', 'js/time.js', 'js/stats.js', 'js/ui.js', 'js/timers.js',
@@ -18,7 +18,21 @@ self.addEventListener('activate', event => {
     .then(() => self.clients.claim()));
 });
 
-// Anything not in the cache (tests.html) falls through to the network.
+// The page and the manifest come from the network when online (and refresh the cache), so a
+// new version and its name show on the next open; offline, the cache answers. Everything
+// else is cache-first, and anything not cached (tests.html) falls through to the network.
+const fromCache = request => caches.match(request, { ignoreSearch: true });
 self.addEventListener('fetch', event => {
-  event.respondWith(caches.match(event.request, { ignoreSearch: true }).then(hit => hit || fetch(event.request)));
+  const request = event.request;
+  if (request.mode === 'navigate' || request.url.endsWith('manifest.json')) {
+    event.respondWith(fetch(request)
+      .then(response => {
+        const copy = response.clone();
+        caches.open(CACHE).then(cache => cache.put(request, copy));
+        return response;
+      })
+      .catch(() => fromCache(request)));
+    return;
+  }
+  event.respondWith(fromCache(request).then(hit => hit || fetch(request)));
 });
