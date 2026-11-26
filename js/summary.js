@@ -90,16 +90,16 @@ function progressHtml(p) {
     <p class="muted small">${block.weeks}-week block · ${fmtDay(block.start)} to ${fmtDay(b.end)}</p>${progressBar(b)}`;
   const end = b.done ? `<h3>Start your next block</h3>${blockPicker()}` : '<button class="ghost small" data-act="block-end">End block</button>';
   if (b.upcoming) return `<section class="card center">${head}<p>Your block starts on ${fmtDay(block.start)}.</p>${end}</section>`;
-  if (!b.recent) {
+  const week1 = sectionVolume(state, ...b.base);
+  if (b.week === 1) {
     return `<section class="card center">${head}
-      <p>Setting your starting point: week ${b.week} of 2.</p>
-      <p class="muted small">Train as normal. From week 3 the spider chart shows each muscle group against these first two weeks.</p>${end}</section>`;
+      <p class="muted small">Week 1 is your starting point. The shape grows with every set (reps × kg per muscle group). From week 2, try to beat it.</p>
+      ${radarHtml(week1, 'week 1', 'kg')}${end}</section>`;
   }
-  const base = sectionVolume(state, ...b.base);
-  const recent = sectionVolume(state, ...b.recent);
+  const now = sectionVolume(state, ...b.current);
   return `<section class="card center">${head}
-    <p class="muted small">Reps × kg in your ${b.done ? 'last' : 'latest'} 2 weeks as a % of your first 2. Dashed ring = where you started. Tap a muscle for each week.</p>
-    ${radarHtml(percentOf(recent, base), 'your first 2 weeks')}${end}</section>`;
+    <p class="muted small">Reps × kg in week ${b.week}${b.done ? '' : ' so far'} as a % of week 1. Pass the dashed ring to beat your first week. Tap a muscle for each week.</p>
+    ${radarHtml(percentOf(now, week1), 'week 1', '%', !b.done)}${end}</section>`;
 }
 
 function periodProgressHtml(p) {

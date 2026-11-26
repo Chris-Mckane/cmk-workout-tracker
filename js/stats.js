@@ -197,18 +197,18 @@ export function sectionVolume(state, from, to) {
 export const percentOf = (now, before) => Object.fromEntries(Object.keys(now).map(s => [s,
   before[s] ? Math.round((now[s] / before[s]) * 100) : now[s] ? Infinity : null]));
 
-// A training block { start (a Monday), weeks } on a given date: its week number and the
-// windows the spider chart compares: the first 14 days set the starting point, and from
-// day 15 the latest 14 days are compared with it. Both windows are always 14 days long.
+// A training block { start, weeks } on a given date. Block weeks run 7 days from the start
+// date. Week 1 is the starting point (base); the current block week is compared with it.
 // Before the start date the block is upcoming (day 0).
 export function blockProgress(block, on) {
   const end = addDays(block.start, block.weeks * 7 - 1);
   const last = on < end ? on : end;
   const day = datesBetween(block.start, last).length;
+  const week = Math.max(1, Math.ceil(day / 7));
   return {
-    end, done: on > end, upcoming: on < block.start, day, days: block.weeks * 7, week: Math.ceil(day / 7),
-    base: [block.start, addDays(block.start, 13)],
-    recent: day > 14 ? [addDays(last, -13), last] : null,
+    end, done: on > end, upcoming: on < block.start, day, days: block.weeks * 7, week,
+    base: [block.start, addDays(block.start, 6)],
+    current: [addDays(block.start, 7 * (week - 1)), addDays(block.start, 7 * week - 1)],
   };
 }
 

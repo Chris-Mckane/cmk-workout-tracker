@@ -153,15 +153,15 @@
     {
       const block = { start: '2026-11-02', weeks: 6 };
       const early = blockProgress(block, '2026-11-10');
-      eq([early.week, early.day, early.days, early.done, early.recent], [2, 9, 42, false, null], 'block weeks 1-2 set the starting point, nothing to compare yet');
+      eq([early.week, early.day, early.days, early.done, early.base, early.current], [2, 9, 42, false, ['2026-11-02', '2026-11-08'], ['2026-11-09', '2026-11-15']], 'week 1 is the starting point; week 2 is compared with it');
       const soon = blockProgress({ start: '2026-11-05', weeks: 4 }, '2026-11-03');
-      eq([soon.upcoming, soon.day, soon.recent], [true, 0, null], 'a block can start on any day, including a later one');
+      eq([soon.upcoming, soon.day], [true, 0], 'a block can start on any day, including a later one');
       const mid = blockProgress(block, '2026-11-17');
-      eq([mid.week, mid.base, mid.recent], [3, ['2026-11-02', '2026-11-15'], ['2026-11-04', '2026-11-17']], 'from week 3, the latest 14 days against the first 14');
+      eq([mid.week, mid.current], [3, ['2026-11-16', '2026-11-22']], 'block weeks run seven days from the start date');
       const late = blockProgress(block, '2026-12-05');
-      eq([late.week, late.recent], [5, ['2026-11-22', '2026-12-05']], 'later on, the latest 14 days');
+      eq([late.week, late.current], [5, ['2026-11-30', '2026-12-06']], 'week 5 of the block');
       const over = blockProgress(block, '2026-12-20');
-      eq([over.done, over.week, over.end, over.recent], [true, 6, '2026-12-13', ['2026-11-30', '2026-12-13']], 'a finished block shows its last 14 days');
+      eq([over.done, over.week, over.end, over.current], [true, 6, '2026-12-13', ['2026-12-07', '2026-12-13']], 'a finished block shows its last week');
     }
     eq(dayType({}, '2026-11-16', true), 'workout', 'a date with a session is a workout day');
     eq(dayType({}, '2026-11-16', false), null, 'no session and no override: unset');

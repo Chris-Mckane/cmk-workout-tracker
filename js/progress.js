@@ -18,23 +18,28 @@ const xy = ([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`;
 // One spoke per section. The dashed ring is 100% (the same). The edge sits just past the
 // biggest change, never under 150%, so small gains still show; "New" is drawn at the edge.
 // Each name is a button that opens that section's history.
-export function radarHtml(pcts, noun) {
+// With unit 'kg' the spokes are plain totals, scaled to the biggest, with no ring. While a
+// week is still building, under 100% is not marked as down.
+export function radarHtml(pcts, noun, unit = '%', building = false) {
+  const kg = unit === 'kg';
   const sections = Object.keys(pcts), n = sections.length;
   const top = Math.max(...Object.values(pcts).filter(Number.isFinite), 0);
-  const cap = Math.max(150, Math.ceil(top / 25) * 25);
+  const cap = kg ? top || 1 : Math.max(150, Math.ceil(top / 25) * 25);
+  const show = v => (kg ? `${Math.round(v).toLocaleString('en-GB')} kg` : pctLabel(v));
+  const tone = v => (kg || (building && trend(v) === 'down') ? '' : trend(v));
   const radius = pct => (R * Math.min(pct ?? 0, cap)) / cap;
   const ring = r => sections.map((_, i) => xy(point(i, n, r))).join(' ');
   const at = (s, i) => point(i, n, radius(pcts[s]));
   const label = (s, i) => {
     const [x, y] = point(i, n, R + 34);
     return `<button class="radar-label" data-section="${esc(s)}" style="left:${(x / SIZE) * 100}%;top:${(y / SIZE) * 100}%"
-      aria-label="${esc(s)}: ${pctLabel(pcts[s])} of ${noun}. Show history">${esc(s)} ›<b class="${trend(pcts[s])}">${pctLabel(pcts[s])}${arrow[trend(pcts[s])]}</b></button>`;
+      aria-label="${esc(s)}: ${show(pcts[s])}${kg ? '' : ` of ${noun}`}. Show history">${esc(s)} ›<b class="${tone(pcts[s])}">${show(pcts[s])}${arrow[tone(pcts[s])]}</b></button>`;
   };
   return `<div class="radar">
     <svg viewBox="0 0 ${SIZE} ${SIZE}" aria-hidden="true">
       <polygon class="radar-edge" points="${ring(R)}"/>
       ${sections.map((_, i) => `<line class="radar-edge" x1="${C}" y1="${C}" x2="${point(i, n, R)[0].toFixed(1)}" y2="${point(i, n, R)[1].toFixed(1)}"/>`).join('')}
-      <polygon class="radar-base" points="${ring(radius(100))}"/>
+      ${kg ? '' : `<polygon class="radar-base" points="${ring(radius(100))}"/>`}
       <polygon class="radar-shape" points="${sections.map((s, i) => xy(at(s, i))).join(' ')}"/>
       ${sections.map((s, i) => `<circle class="radar-dot" cx="${at(s, i)[0].toFixed(1)}" cy="${at(s, i)[1].toFixed(1)}" r="4"/>`).join('')}
     </svg>${sections.map(label).join('')}</div>`;
