@@ -53,7 +53,7 @@ function timesSheet({ title, startLabel, endLabel, start, end, endOptional, onSa
 
 export function editFastTimes(fast, done) {
   timesSheet({
-    title: 'Fast times', startLabel: 'Started', endLabel: 'Ended', start: fast.start, end: fast.end, endOptional: true,
+    title: 'Edit fast time', startLabel: 'Started', endLabel: 'Ended', start: fast.start, end: fast.end, endOptional: true,
     onSave: (start, end) => {
       if (!end && runningFast() && runningFast() !== fast) return tip('Another fast is already in progress') && false;
       Object.assign(fast, { start, end });
@@ -65,7 +65,7 @@ export function editFastTimes(fast, done) {
 // A logged night, or (with no entry) the bedtime of the night still in progress.
 export function editSleepTimes(entry, done) {
   timesSheet({
-    title: 'Sleep times', startLabel: 'Went to bed', endLabel: entry && 'Woke up', start: entry?.bed ?? state.bedtime, end: entry?.wake,
+    title: 'Edit sleep time', startLabel: 'Went to bed', endLabel: entry && 'Woke up', start: entry?.bed ?? state.bedtime, end: entry?.wake,
     onSave: (bed, wake) => {
       if (entry) Object.assign(entry, { bed, wake });
       else state.bedtime = bed;
@@ -131,7 +131,7 @@ function renderSleep() {
   root.querySelector('#sleep').innerHTML = `<h2>Sleep</h2>
     <p class="big" id="sleep-total">${entry ? sleepTotal(entry) : '<span class="muted small">Not logged yet</span>'}</p>
     ${state.bedtime ? `<p class="row muted small"><span class="grow">Asleep since ${fmtDateTime(state.bedtime)}</span>
-      <button class="ghost" data-act="bedtime-edit">Change time</button></p>` : ''}
+      <button class="ghost" data-act="bedtime-edit">Edit time</button></p>` : ''}
     <div class="row">${sleepButtonHtml(state.bedtime)}</div>
     <label>Bed time <input type="datetime-local" data-field="bed" value="${bed}"></label>
     <label>Awake time <input type="datetime-local" data-field="wake" value="${wake}"></label>
@@ -145,7 +145,7 @@ function renderFasting() {
   root.querySelector('#fasting').innerHTML = `<h2>Fasting</h2>
     ${running ? `<p class="big" id="fast-live"></p>
       <p class="row muted small"><span class="grow">Started ${fmtDateTime(running.start)}</span>
-        <button class="ghost" data-act="fast-edit" data-id="${running.id}">Change times</button></p>` : ''}
+        <button class="ghost" data-act="fast-edit" data-id="${running.id}">Edit time</button></p>` : ''}
     <div class="row">${fastButtonHtml(Boolean(running))}</div>
     ${recentList(recent, f => `<b>${f.end ? fmtHM(secondsBetween(f.start, f.end)) : 'In progress'}</b>
       <span class="muted small">${fmtDateTime(f.start)} to ${f.end ? fmtDateTime(f.end) : 'now'}</span>`, 'fast')}`;

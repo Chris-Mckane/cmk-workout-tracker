@@ -65,8 +65,8 @@ function todayCard() {
     </ul></details>
     ${nutritionHtml(nutrition ?? null)}
     ${fast || lastFast || state.bedtime || sleep ? `<div class="row">
-      ${fast || lastFast ? `<button class="bar-link grow" data-act="fast-times" data-id="${(fast ?? lastFast).id}">Change fast times ›</button>` : ''}
-      ${state.bedtime || sleep ? `<button class="bar-link grow" data-act="sleep-times" data-id="${state.bedtime ? '' : sleep.id}">Change sleep times ›</button>` : ''}
+      ${fast || lastFast ? `<button class="bar-link grow" data-act="fast-times" data-id="${(fast ?? lastFast).id}">Edit fast time ›</button>` : ''}
+      ${state.bedtime || sleep ? `<button class="bar-link grow" data-act="sleep-times" data-id="${state.bedtime ? '' : sleep.id}">Edit sleep time ›</button>` : ''}
     </div>` : ''}
     <div class="row">
       ${fastButtonHtml(Boolean(fast))}

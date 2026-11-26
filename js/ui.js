@@ -250,7 +250,9 @@ export function onPress(root, selector, { tap, long }) {
 
 export function openSheet(html) {
   const dialog = document.createElement('dialog');
-  dialog.innerHTML = `<div class="sheet">${html}</div>`;
+  // The sheet takes focus itself, so it opens at the top instead of scrolling to a button
+  // and no keyboard pops up for the first field.
+  dialog.innerHTML = `<div class="sheet" tabindex="-1" autofocus>${html}</div>`;
   document.body.append(dialog);
   dialog.addEventListener('close', () => dialog.remove());
   dialog.addEventListener('click', e => {
@@ -261,11 +263,14 @@ export function openSheet(html) {
 }
 
 // Confirm sheet. tone 'danger' (red) for destructive actions, 'primary' for ordinary ones.
-export function ask(message, okLabel = 'OK', tone = 'danger') {
+// aside { label, open } adds a link on the left, e.g. to read more before deciding.
+export function ask(message, okLabel = 'OK', tone = 'danger', aside = null) {
   return new Promise(resolve => {
     const dialog = openSheet(`<p>${esc(message)}</p>
-      <div class="row end"><button class="ghost" data-close>${tone === 'danger' ? 'Cancel' : 'No'}</button><button class="${tone}" data-ok>${esc(okLabel)}</button></div>`);
+      <div class="row">${aside ? `<button class="ghost link" data-aside>${esc(aside.label)}</button>` : ''}<span class="grow"></span>
+        <button class="ghost" data-close>${tone === 'danger' ? 'Cancel' : 'No'}</button><button class="${tone}" data-ok>${esc(okLabel)}</button></div>`);
     dialog.addEventListener('click', e => {
+      if (e.target.closest('[data-aside]')) aside.open();
       if (!e.target.closest('[data-ok]')) return;
       resolve(true);
       dialog.close();

@@ -109,10 +109,10 @@ surviving a real 5 minute lock / app swipe-away / phone restart, and the iOS bac
 ## 26 Nov 2026 round
 - Nutrition faces smaller (38px) with the middle label "Okay".
 - Finishing a workout only offers to save its structure (when it changed); it never asks for the next workout. Programs still rotate automatically.
-- One `timesSheet` in daily.js backs "Change fast times" and "Change sleep times" (Home links, Daily buttons, past entries); bedtime can be corrected while asleep.
+- One `timesSheet` in daily.js backs "Edit fast time" and "Edit sleep time" (Home links, Daily buttons, past entries); bedtime can be corrected while asleep.
 - Settings cog at the top right of every screen; bottom bar is Home, Workout, Summary; Home tiles are My workouts and Daily log.
 - Summary "By exercise" is a fold-away dropdown (shared `.fold` style with Today's progress).
-- Following a program asks "Begin <program> from your next workout?" first; No changes nothing. `ask()` takes a tone ('danger' or 'primary').
+- Following a program asks "Begin <program> from your next workout?" first; No changes nothing; an "About <program>" link on the left opens its guide. `ask()` takes a tone ('danger' or 'primary') and an optional left-hand link.
 
 ## Decisions (one line each)
 - Extra module `stats.js` holds all pure derived maths so `tests.html` can cover it without the DOM.

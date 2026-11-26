@@ -48,6 +48,11 @@ function programHtml(p) {
   </div>`;
 }
 
+function programGuide(p) {
+  openSheet(`<h2>${esc(p.name)}</h2>${p.guide.map(([title, body]) => `<section class="step"><h3>${esc(title)}</h3><p>${esc(body)}</p></section>`).join('')}
+    <div class="row end"><button class="primary" data-close>Got it</button></div>`);
+}
+
 function draftHtml(names) {
   const chosen = draft.exerciseIds.map(id => `<li data-id="${id}" data-drag="${id}">${GRIP}<span class="grow">${esc(names.get(id))}</span>
     <button class="ghost" data-act="remove" aria-label="Remove">✕</button></li>`).join('');
@@ -169,17 +174,13 @@ async function onClick(e) {
     case 'new': draft = { id: null, name: '', exerciseIds: [] }; break;
     case 'follow': {
       const p = PROGRAMS.find(x => x.id === btn.closest('[data-program]').dataset.program);
-      if (!(await ask(`Begin ${p.name} from your next workout?`, 'Yes, begin', 'primary'))) return;
+      const about = { label: `About ${p.name}`, open: () => programGuide(p) };
+      if (!(await ask(`Begin ${p.name} from your next workout?`, 'Yes, begin', 'primary', about))) return;
       followProgram(p.id);
       tip(`${p.name} begins with your next workout`);
       break;
     }
-    case 'learn': {
-      const p = PROGRAMS.find(x => x.id === btn.closest('[data-program]').dataset.program);
-      openSheet(`<h2>${esc(p.name)}</h2>${p.guide.map(([title, body]) => `<section class="step"><h3>${esc(title)}</h3><p>${esc(body)}</p></section>`).join('')}
-        <div class="row end"><button class="primary" data-close>Got it</button></div>`);
-      return;
-    }
+    case 'learn': return programGuide(PROGRAMS.find(x => x.id === btn.closest('[data-program]').dataset.program));
     case 'unfollow':
       state.settings.program = null;
       save();
