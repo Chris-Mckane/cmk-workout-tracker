@@ -153,7 +153,9 @@
     {
       const block = { start: '2026-11-02', weeks: 6 };
       const early = blockProgress(block, '2026-11-10');
-      eq([early.week, early.done, early.recent], [2, false, null], 'block weeks 1-2 set the starting point, nothing to compare yet');
+      eq([early.week, early.day, early.days, early.done, early.recent], [2, 9, 42, false, null], 'block weeks 1-2 set the starting point, nothing to compare yet');
+      const soon = blockProgress({ start: '2026-11-05', weeks: 4 }, '2026-11-03');
+      eq([soon.upcoming, soon.day, soon.recent], [true, 0, null], 'a block can start on any day, including a later one');
       const mid = blockProgress(block, '2026-11-17');
       eq([mid.week, mid.base, mid.recent], [3, ['2026-11-02', '2026-11-15'], ['2026-11-04', '2026-11-17']], 'from week 3, the latest 14 days against the first 14');
       const late = blockProgress(block, '2026-12-05');

@@ -122,6 +122,8 @@ label { display: flex; align-items: center; justify-content: space-between; gap:
 .radar-label b { font-size: 14px; color: var(--text); }
 .radar-label b.up { color: var(--green); }
 .radar-label b.down { color: var(--orange); }
+.block-bar { height: 10px; border-radius: 5px; background: var(--grey); overflow: hidden; }
+.block-bar span { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, var(--green), var(--accent)); }
 .bars { display: block; width: 100%; }
 .bars .hit { fill: transparent; }
 .bars path { fill: var(--accent); fill-opacity: .4; }

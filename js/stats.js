@@ -200,12 +200,13 @@ export const percentOf = (now, before) => Object.fromEntries(Object.keys(now).ma
 // A training block { start (a Monday), weeks } on a given date: its week number and the
 // windows the spider chart compares: the first 14 days set the starting point, and from
 // day 15 the latest 14 days are compared with it. Both windows are always 14 days long.
+// Before the start date the block is upcoming (day 0).
 export function blockProgress(block, on) {
   const end = addDays(block.start, block.weeks * 7 - 1);
   const last = on < end ? on : end;
   const day = datesBetween(block.start, last).length;
   return {
-    end, done: on > end, week: Math.ceil(day / 7),
+    end, done: on > end, upcoming: on < block.start, day, days: block.weeks * 7, week: Math.ceil(day / 7),
     base: [block.start, addDays(block.start, 13)],
     recent: day > 14 ? [addDays(last, -13), last] : null,
   };

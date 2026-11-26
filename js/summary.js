@@ -71,20 +71,25 @@ function daysHtml(w) {
 
 // Volume per muscle group against the period before; tapping a group opens its history.
 const BLOCK_WEEKS = [4, 6, 12];
-const blockButtons = label => `<div class="row">${BLOCK_WEEKS.map(n => `<button class="grow" data-act="block" data-weeks="${n}">${n} weeks</button>`).join('')}</div>
-  <p class="muted small">${label}</p>`;
+const blockPicker = () => `<label>Start date <input type="date" data-field="block-start" value="${today()}"></label>
+  <div class="row">${BLOCK_WEEKS.map(n => `<button class="grow" data-act="block" data-weeks="${n}">${n} weeks</button>`).join('')}</div>`;
+
+const progressBar = b => `<div class="block-bar" role="progressbar" aria-label="Block progress" aria-valuemin="0" aria-valuemax="${b.days}" aria-valuenow="${Math.min(b.day, b.days)}">
+  <span style="width:${(Math.min(b.day, b.days) / b.days) * 100}%"></span></div>
+  <p class="muted small">${b.upcoming ? 'Not started yet' : b.done ? `All ${b.days} days done` : `Day ${b.day} of ${b.days}`}</p>`;
 
 // With a training block, the spider chart tracks it: the latest 14 days against the first 14.
 // Without one, it compares the period on screen with the one before, and offers a block.
 function progressHtml(p) {
   const block = state.settings.block;
   if (!block) return `${periodProgressHtml(p)}<section class="card center"><h2>Track a training block</h2>
-    <p class="muted small">Commit to 4, 6 or 12 weeks. The spider chart then shows how each muscle group grows from where you started.</p>
-    ${blockButtons('Starts this Monday.')}</section>`;
+    <p class="muted small">Commit to 4, 6 or 12 weeks, starting on the day that suits you. The spider chart then shows how each muscle group grows from where you started.</p>
+    ${blockPicker()}</section>`;
   const b = blockProgress(block, today());
-  const head = `<h2>${b.done ? 'Block complete' : `Week ${b.week} of ${block.weeks}`}</h2>
-    <p class="muted small">${block.weeks}-week block · ${fmtDay(block.start)} to ${fmtDay(b.end)}</p>`;
-  const end = b.done ? blockButtons('Start your next block.') : '<button class="ghost small" data-act="block-end">End block</button>';
+  const head = `<h2>${b.done ? 'Block complete' : b.upcoming ? 'Block starts soon' : `Week ${b.week} of ${block.weeks}`}</h2>
+    <p class="muted small">${block.weeks}-week block · ${fmtDay(block.start)} to ${fmtDay(b.end)}</p>${progressBar(b)}`;
+  const end = b.done ? `<h3>Start your next block</h3>${blockPicker()}` : '<button class="ghost small" data-act="block-end">End block</button>';
+  if (b.upcoming) return `<section class="card center">${head}<p>Your block starts on ${fmtDay(block.start)}.</p>${end}</section>`;
   if (!b.recent) {
     return `<section class="card center">${head}
       <p>Setting your starting point: week ${b.week} of 2.</p>
@@ -125,12 +130,13 @@ function showHistory(section) {
   openHistory(section, bars, bars.length - 1, p.noun, p.last);
 }
 
-function trainedHtml(p) {
-  const [from, to] = p.range(anchor);
+function trainedHtml() {
+  const from = weekStart(anchor), to = addDays(from, 6);
   const muscles = musclesTrained(state.sessions.filter(s => s.date >= from && s.date <= to), musclesOf, state.exercises);
-  if (!muscles.primary.length) return '';
-  return `<section class="card center"><h2>Muscles trained</h2>${muscleMapHtml(muscles, 90)}
-    <p class="muted small"><span class="key primary"></span> main <span class="key secondary"></span> supporting</p></section>`;
+  const current = from === weekStart(today());
+  return `<section class="card center"><h2>Muscles trained ${current ? 'this week' : ''}</h2>
+    <p class="muted small">${current ? 'Starts fresh every Monday' : weekLabel(from)}</p>${muscleMapHtml(muscles, 90)}
+    ${muscles.primary.length ? '<p class="muted small"><span class="key primary"></span> main <span class="key secondary"></span> supporting</p>' : '<p class="muted small">Nothing trained yet.</p>'}</section>`;
 }
 
 function render() {
@@ -157,7 +163,7 @@ function render() {
       <div class="row"><span class="muted small">Vibe</span>${w.vibes.map(v => dot(v, `Session vibe: ${v ?? 'not rated'}`)).join('') || '<span class="muted small">no sessions</span>'}</div>
     </section>
     ${progressHtml(p)}
-    ${trainedHtml(p)}
+    ${trainedHtml()}
     <section class="card"><h2>${period === 'day' ? 'Day' : 'Days'}</h2>${daysHtml(w)}</section>
     <section class="card"><h2>By workout</h2>
       ${list(w.byWorkout, x => `<li><b>${esc(x.name)}</b><br><span class="muted small">${plural(x.sessions, 'session')} · ${plural(x.sets, 'set')} · ${plural(x.reps, 'rep')}</span></li>`)}</section>
@@ -258,7 +264,8 @@ function onClick(e) {
   const muscle = e.target.closest('[data-section]')?.dataset.section;
   if (muscle) return showHistory(muscle);
   if (e.target.closest('[data-act="block"]')) {
-    state.settings.block = { start: weekStart(today()), weeks: Number(e.target.closest('[data-weeks]').dataset.weeks) };
+    const start = root.querySelector('[data-field="block-start"]')?.value || today();
+    state.settings.block = { start, weeks: Number(e.target.closest('[data-weeks]').dataset.weeks) };
     save();
     return render();
   }
