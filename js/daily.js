@@ -5,12 +5,11 @@ import { today, addDays, fmtDay, toInput, fromInput, dateOfIso, fmtTime, fmtDate
 import { dayType, doneNames } from './stats.js';
 import { esc, setText, facesHtml, toggleValue, fastButtonHtml, sleepButtonHtml, openSheet, ask, tip, go } from './ui.js';
 
-export const NUTRITION = { bad: 'Not great', ok: 'OK, could be better', great: 'Great' };
+export const NUTRITION = { bad: 'Not great', ok: 'Okay', great: 'Great' };
 const RECENT = 2;   // entries shown in each recent list until Show all
 
 let root;
 let date = today();
-let sleepEditId = null;
 const expanded = new Set();   // recent lists showing every entry
 
 const sessionsToday = () => state.sessions.filter(s => s.date === date);
@@ -33,24 +32,45 @@ export function toggleSleep() {
   save();
 }
 
-// Change when a fast started or ended, for when the button was tapped late. Leaving
-// "Ended" empty keeps the fast running. onSave runs after a valid save.
-export function editFastTimes(fast, onSave) {
-  const sheet = openSheet(`<h2>Fast times</h2>
-    <label>Started <input type="datetime-local" name="start" value="${toInput(fast.start)}"></label>
-    <label>Ended <input type="datetime-local" name="end" value="${fast.end ? toInput(fast.end) : ''}"></label>
-    <p class="muted small">Leave Ended empty if you are still fasting.</p>
+// A sheet to correct a start and end time, for when a button was tapped late. With
+// endOptional, an empty end keeps it running. onSave(startIso, endIso | null) after checks.
+function timesSheet({ title, startLabel, endLabel, start, end, endOptional, onSave }) {
+  const sheet = openSheet(`<h2>${title}</h2>
+    <label>${startLabel} <input type="datetime-local" name="start" value="${toInput(start)}"></label>
+    ${endLabel ? `<label>${endLabel} <input type="datetime-local" name="end" value="${end ? toInput(end) : ''}"></label>` : ''}
+    ${endOptional ? `<p class="muted small">Leave ${endLabel} empty if it is still going.</p>` : ''}
     <div class="row end"><button class="ghost" data-close>Cancel</button><button class="primary" data-save>Save</button></div>`);
   sheet.addEventListener('click', e => {
     if (!e.target.closest('[data-save]')) return;
-    const start = sheet.querySelector('[name="start"]').value, end = sheet.querySelector('[name="end"]').value;
-    if (!start || (end && end <= start)) return tip('End must be after start');
-    if (!end && runningFast() && runningFast() !== fast) return tip('Another fast is already in progress');
-    if (fromInput(start) > new Date().toISOString()) return tip('Start cannot be in the future');
-    Object.assign(fast, { start: fromInput(start), end: end ? fromInput(end) : null });
+    const startValue = sheet.querySelector('[name="start"]').value, endValue = sheet.querySelector('[name="end"]')?.value ?? '';
+    if (!startValue || (endLabel && !endValue && !endOptional) || (endValue && endValue <= startValue)) return tip(`${endLabel ?? 'End'} must be after ${startLabel.toLowerCase()}`);
+    if (fromInput(startValue) > new Date().toISOString()) return tip(`${startLabel} cannot be in the future`);
+    if (onSave(fromInput(startValue), endValue ? fromInput(endValue) : null) === false) return;
     save();
     sheet.close();
-    onSave();
+  });
+}
+
+export function editFastTimes(fast, done) {
+  timesSheet({
+    title: 'Fast times', startLabel: 'Started', endLabel: 'Ended', start: fast.start, end: fast.end, endOptional: true,
+    onSave: (start, end) => {
+      if (!end && runningFast() && runningFast() !== fast) return tip('Another fast is already in progress') && false;
+      Object.assign(fast, { start, end });
+      done();
+    },
+  });
+}
+
+// A logged night, or (with no entry) the bedtime of the night still in progress.
+export function editSleepTimes(entry, done) {
+  timesSheet({
+    title: 'Sleep times', startLabel: 'Went to bed', endLabel: entry && 'Woke up', start: entry?.bed ?? state.bedtime, end: entry?.wake,
+    onSave: (bed, wake) => {
+      if (entry) Object.assign(entry, { bed, wake });
+      else state.bedtime = bed;
+      done();
+    },
   });
 }
 
@@ -69,7 +89,6 @@ export const nutritionHtml = value => `<div class="nutrition"><h2>Nutrition</h2>
 // A phone can keep the app open for days; when the date changes, go back to today.
 export function newDay() {
   date = today();
-  sleepEditId = null;
 }
 
 // Reads the sleep form's bed and wake inputs as ISO strings, or null if invalid.
@@ -105,18 +124,18 @@ function renderDayType() {
 }
 
 function renderSleep() {
-  const editing = state.sleep.find(x => x.id === sleepEditId);
-  const entry = editing ?? state.sleep.find(x => dateOfIso(x.wake) === date);
+  const entry = state.sleep.find(x => dateOfIso(x.wake) === date);
   const bed = entry ? toInput(entry.bed) : `${addDays(date, -1)}T23:00`;
   const wake = entry ? toInput(entry.wake) : `${date}T07:00`;
   const recent = [...state.sleep].sort((a, b) => b.wake.localeCompare(a.wake));
   root.querySelector('#sleep').innerHTML = `<h2>Sleep</h2>
     <p class="big" id="sleep-total">${entry ? sleepTotal(entry) : '<span class="muted small">Not logged yet</span>'}</p>
+    ${state.bedtime ? `<p class="row muted small"><span class="grow">Asleep since ${fmtDateTime(state.bedtime)}</span>
+      <button class="ghost" data-act="bedtime-edit">Change time</button></p>` : ''}
     <div class="row">${sleepButtonHtml(state.bedtime)}</div>
     <label>Bed time <input type="datetime-local" data-field="bed" value="${bed}"></label>
     <label>Awake time <input type="datetime-local" data-field="wake" value="${wake}"></label>
-    <div class="row end">${editing ? '<button class="ghost" data-act="sleep-cancel">Cancel</button>' : ''}
-      <button class="primary" data-act="sleep-save">${entry ? 'Update sleep' : 'Log sleep'}</button></div>
+    <div class="row end"><button class="primary" data-act="sleep-save">${entry ? 'Update sleep' : 'Log sleep'}</button></div>
     ${recentList(recent, x => `<b>${sleepTotal(x)}</b> <span class="muted small">${fmtDay(dateOfIso(x.wake))} · ${fmtTime(x.bed)} to ${fmtTime(x.wake)}</span>`, 'sleep')}`;
 }
 
@@ -156,7 +175,6 @@ export function tick() {
 
 function setDate(next) {
   date = next;
-  sleepEditId = null;
   render();
 }
 
@@ -170,10 +188,9 @@ function toggleDayType(tapped) {
 function saveSleep() {
   const span = readSpan('bed', 'wake');
   if (!span) return tip('Awake time must be after bed time');
-  const entry = state.sleep.find(x => x.id === sleepEditId) ?? state.sleep.find(x => dateOfIso(x.wake) === date);
+  const entry = state.sleep.find(x => dateOfIso(x.wake) === date);
   if (entry) Object.assign(entry, { bed: span.start, wake: span.end });
   else state.sleep.push({ id: uid(), bed: span.start, wake: span.end });
-  sleepEditId = null;
   save();
   renderSleep();
 }
@@ -202,8 +219,8 @@ function onClick(e) {
     case 'open': return go('session', { openId: id });
     case 'start': return go('session', { date });
     case 'sleep-save': return saveSleep();
-    case 'sleep-edit': sleepEditId = id; return renderSleep();
-    case 'sleep-cancel': sleepEditId = null; return renderSleep();
+    case 'sleep-edit': return editSleepTimes(state.sleep.find(x => x.id === id), renderSleep);
+    case 'bedtime-edit': return editSleepTimes(null, renderSleep);
     case 'sleep-delete': return removeEntry(state.sleep, id, renderSleep);
     case 'fast':
       toggleFast();

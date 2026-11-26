@@ -1,4 +1,5 @@
-// Summary screen: totals for a day, a Monday-to-Sunday week or a month, plus the settings sheet.
+// Summary screen: totals for a day, a Monday-to-Sunday week or a month. Also the settings
+// sheet, opened from the cog at the top of every screen.
 
 import { state, save, replaceState, migrate } from './store.js';
 import { today, weekStart, addDays, weekLabel, fmtDay, fmtHM, dateOfIso, daysSince, monthStart, monthEnd, addMonths, monthLabel, parseDate } from './time.js';
@@ -8,7 +9,6 @@ import { muscleMapHtml } from './muscles.js';
 import { esc, fmtNum, starsHtml, placeLegend, openSheet, ask, isIOS } from './ui.js';
 import { REST_PRESETS } from './timers.js';
 
-const GEAR = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke-dasharray="3.34 3.34"/><circle cx="12" cy="12" r="5.5"/></svg>`;
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const TYPE_LETTERS = { workout: 'W', rest: 'R' };
 const NUDGE_DAYS = isIOS ? 7 : 14;
@@ -35,7 +35,7 @@ function nudgeHtml() {
   const { lastExport, nudgeDismissedAt } = state.settings;
   const hasLogs = state.sessions.length + state.sleep.length + state.fasts.length > 0;
   if (!hasLogs || Math.min(daysSince(lastExport), daysSince(nudgeDismissedAt)) <= NUDGE_DAYS) return '';
-  return `<div class="card notice row"><span class="grow">${lastExport ? `Your last backup is over ${NUDGE_DAYS} days old.` : 'You have no backup yet.'} Export one from settings.</span>
+  return `<div class="card notice row"><span class="grow">${lastExport ? `Your last backup is over ${NUDGE_DAYS} days old.` : 'You have no backup yet.'} Export one from settings (the cog, top right).</span>
     <button class="ghost" data-act="nudge-dismiss" aria-label="Dismiss">✕</button></div>`;
 }
 
@@ -87,7 +87,6 @@ function render() {
       <button data-act="prev" aria-label="Previous ${p.label.toLowerCase()}">‹</button>
       <h1 class="grow center">${p.title(anchor)}</h1>
       <button data-act="next" aria-label="Next ${p.label.toLowerCase()}">›</button>
-      <button class="ghost" data-act="settings" aria-label="Settings">${GEAR}</button>
     </header>
     ${nudgeHtml()}
     <div class="grid">
@@ -102,7 +101,8 @@ function render() {
     <section class="card"><h2>${period === 'day' ? 'Day' : 'Days'}</h2>${daysHtml(w)}</section>
     <section class="card"><h2>By workout</h2>
       ${list(w.byWorkout, x => `<li><b>${esc(x.name)}</b><br><span class="muted small">${plural(x.sessions, 'session')} · ${plural(x.sets, 'set')} · ${plural(x.reps, 'rep')}</span></li>`)}</section>
-    <section class="card"><h2>By exercise</h2>${list(w.byExercise, exerciseHtml)}</section>
+    <details class="card fold"><summary><span class="grow"><h2>By exercise</h2>
+      <span class="muted small">${plural(w.byExercise.length, 'exercise')}</span></span></summary>${list(w.byExercise, exerciseHtml)}</details>
     <section class="card"><h2>Sleep</h2>
       <p>${w.sleep.nights ? `Average ${fmtHM(w.sleep.avgSec)} per night · Total ${fmtHM(w.sleep.totalSec)}` : `<span class="muted small">No sleep logged ${p.noun}.</span>`}</p></section>
     <section class="card"><h2>Fasting</h2>
@@ -189,7 +189,6 @@ function onClick(e) {
     case 'period': period = btn.dataset.period; return render();
     case 'prev': anchor = PERIODS[period].step(anchor, -1); return render();
     case 'next': anchor = PERIODS[period].step(anchor, 1); return render();
-    case 'settings': return openSettings();
     case 'nudge-dismiss':
       state.settings.nudgeDismissedAt = new Date().toISOString();
       save();

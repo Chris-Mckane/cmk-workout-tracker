@@ -8,16 +8,13 @@ import { periodStats, applyOrder, dayType, plannedWorkout, doneNames } from './s
 import { esc, nextSelectHtml, go, setText, enableDrag, GRIP, facesHtml, toggleValue, fastButtonHtml, sleepButtonHtml } from './ui.js';
 import { startSession } from './session.js';
 import { workoutChoices, adoptWorkout } from './library.js';
-import { openSettings } from './summary.js';
-import { runningFast, toggleFast, toggleSleep, setNutrition, nutritionHtml, editFastTimes, NUTRITION } from './daily.js';
+import { runningFast, toggleFast, toggleSleep, setNutrition, nutritionHtml, editFastTimes, editSleepTimes, NUTRITION } from './daily.js';
 
 const CARDS = ['today', 'workout'];
 const DAY_TYPES = { workout: 'Workout day', rest: 'Rest day' };
 const TILES = [
   ['workouts', 'My workouts', 'Workouts and exercise library'],
   ['daily', 'Daily log', 'Day type, nutrition, sleep, fasting'],
-  ['summary', 'Summary', 'Day, week and month totals'],
-  ['settings', 'Backup & settings', 'Export, import, rest timer'],
 ];
 
 let root;
@@ -57,7 +54,7 @@ function todayCard() {
     fast && 'Fasting',
   ].filter(Boolean).join(' · ');
   // The details fold away (remembered in settings.todayOpen); the buttons always show.
-  return `<details class="today" data-today${state.settings.todayOpen ? ' open' : ''}>
+  return `<details class="fold" data-today${state.settings.todayOpen ? ' open' : ''}>
     <summary><span class="grow"><h2>Today's progress</h2><span class="muted small">${glance}</span></span></summary>
     <ul class="plain facts">
       <li><span class="muted">Workouts</span><b>${sessions.length ? `${plural(sessions.length, 'session')} · ${plural(totals.sets, 'set')}` : 'None yet'}</b></li>
@@ -67,7 +64,10 @@ function todayCard() {
       <li><span class="muted">Fast</span><b id="home-fast">${fast ? '' : lastFast ? `Last fast ${fmtHM(secondsBetween(lastFast.start, lastFast.end))}` : 'Not fasting'}</b></li>
     </ul></details>
     ${nutritionHtml(nutrition ?? null)}
-    ${fast || lastFast ? `<button class="bar-link" data-act="fast-times" data-id="${(fast ?? lastFast).id}">Change fast times ›</button>` : ''}
+    ${fast || lastFast || state.bedtime || sleep ? `<div class="row">
+      ${fast || lastFast ? `<button class="bar-link grow" data-act="fast-times" data-id="${(fast ?? lastFast).id}">Change fast times ›</button>` : ''}
+      ${state.bedtime || sleep ? `<button class="bar-link grow" data-act="sleep-times" data-id="${state.bedtime ? '' : sleep.id}">Change sleep times ›</button>` : ''}
+    </div>` : ''}
     <div class="row">
       ${fastButtonHtml(Boolean(fast))}
       ${sleepButtonHtml(state.bedtime)}
@@ -99,7 +99,6 @@ function onClick(e) {
     return;
   }
   const tile = e.target.closest('[data-open]')?.dataset.open;
-  if (tile === 'settings') return openSettings();
   if (tile) return go(tile, tile === 'daily' ? { date: today() } : {});
   const btn = e.target.closest('[data-act]');
   switch (btn?.dataset.act) {
@@ -109,6 +108,7 @@ function onClick(e) {
       toggleFast();
       return render();
     case 'fast-times': return editFastTimes(state.fasts.find(f => f.id === btn.dataset.id), render);
+    case 'sleep-times': return editSleepTimes(state.sleep.find(x => x.id === btn.dataset.id) ?? null, render);
     case 'sleep':
       toggleSleep();
       return render();

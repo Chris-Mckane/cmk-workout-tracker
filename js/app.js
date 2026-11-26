@@ -78,7 +78,7 @@ document.querySelector('nav').addEventListener('click', e => {
   const tab = e.target.closest('button')?.dataset.tab;
   if (tab) show(tab);
 });
-document.querySelector('[data-home]').addEventListener('click', () => show('home'));
+document.querySelector('[data-settings]').addEventListener('click', summary.openSettings);
 document.addEventListener('go', e => show(e.detail.tab, e.detail));
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') flush();

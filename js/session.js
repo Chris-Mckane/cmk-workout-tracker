@@ -5,7 +5,7 @@ import { today, fmtDay, fmtClock, elapsedSec } from './time.js';
 import { buildHistory, measure, pbsOf, isStrength, sessionSummary, groupBySection, doneNames, catalogue, applyOrder, plannedWorkout, suggestKg, nextInProgram } from './stats.js';
 import { LIBRARY, adopt, detailOf, musclesOf, workoutChoices, adoptWorkout, PROGRAMS } from './library.js';
 import { muscleMapHtml } from './muscles.js';
-import { esc, sectionsHtml, nextSelectHtml, enableDrag, GRIP, go, num, tip, fmtNum, setText, facesHtml, toggleValue, starsHtml, placeLegend, onPress, openSheet, ask, haptic } from './ui.js';
+import { esc, sectionsHtml, enableDrag, GRIP, num, tip, fmtNum, setText, facesHtml, toggleValue, starsHtml, placeLegend, onPress, openSheet, ask, haptic } from './ui.js';
 import * as timers from './timers.js';
 import { editExercise } from './workouts.js';
 
@@ -329,33 +329,21 @@ function saveAsWorkout(session) {
   });
 }
 
-// After Finish: 1. save the workout's structure (skipped when it matches its workout),
-// 2. plan the next workout: a saved one, or build a new one.
+// After Finish: if the exercises differ from the workout they came from (or there was none),
+// offer to save the structure. Planning the next workout is left to Home.
 function finishSheet(session) {
   const exerciseIds = session.entries.map(x => x.exerciseId);
   const unchanged = templateOf(session)?.exerciseIds.join() === exerciseIds.join();
-  const askToSave = exerciseIds.length > 0 && !unchanged;
-  const picker = () => nextSelectHtml(workoutChoices(), state.settings.next);
+  if (!exerciseIds.length || unchanged) return tip('Workout saved');
   const sheet = openSheet(`<h2>Workout finished</h2>
-    ${askToSave ? `<section class="step" data-save-step><h3>1. Save this workout's structure</h3>${saveFormHtml(session)}</section>` : ''}
-    <section class="step"><h3>${askToSave ? '2. ' : ''}Next workout</h3><div data-picker>${picker()}</div></section>
+    <section class="step"><h3>Save this workout's structure?</h3>${saveFormHtml(session)}</section>
     <div class="row end"><button class="ghost" data-close>Not now</button></div>`);
-  // Choosing the next workout saves it to Home; choosing build opens the workout builder.
-  sheet.addEventListener('change', e => {
-    if (!e.target.matches('[data-next]') || !e.target.value) return;
-    sheet.close();
-    if (e.target.value === 'build') return go('workouts', { build: true });
-    state.settings.next = adoptWorkout(e.target.value);
-    save();
-    tip(`Next workout: ${state.workouts.find(w => w.id === e.target.value).name}`);
-    go('home');
-  });
   sheet.addEventListener('click', e => {
     const workout = saveStructure(e, sheet, session);
     if (!workout) return;
     save();
-    sheet.querySelector('[data-save-step]').innerHTML = `<h3>1. Saved as "${esc(workout.name)}" ✓</h3>`;
-    sheet.querySelector('[data-picker]').innerHTML = picker();
+    sheet.close();
+    tip(`Saved workout "${workout.name}"`);
     render();
   });
 }

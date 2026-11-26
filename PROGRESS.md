@@ -106,6 +106,14 @@ surviving a real 5 minute lock / app swipe-away / phone restart, and the iOS bac
 - One "Fast times" sheet (`editFastTimes`) to change a fast's start and end, from Home ("Change fast times"), the Daily fasting card and each past fast; replaces the old inline form.
 - README updated for Home/Summary; leftover option and naming cleaned up.
 
+## 26 Nov 2026 round
+- Nutrition faces smaller (38px) with the middle label "Okay".
+- Finishing a workout only offers to save its structure (when it changed); it never asks for the next workout. Programs still rotate automatically.
+- One `timesSheet` in daily.js backs "Change fast times" and "Change sleep times" (Home links, Daily buttons, past entries); bedtime can be corrected while asleep.
+- Settings cog at the top right of every screen; bottom bar is Home, Workout, Summary; Home tiles are My workouts and Daily log.
+- Summary "By exercise" is a fold-away dropdown (shared `.fold` style with Today's progress).
+- Following a program asks "Begin <program> from your next workout?" first; No changes nothing. `ask()` takes a tone ('danger' or 'primary').
+
 ## Decisions (one line each)
 - Extra module `stats.js` holds all pure derived maths so `tests.html` can cover it without the DOM.
 - Save batching uses a microtask (not rAF) so writes still land when the page is hidden.

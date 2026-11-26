@@ -260,10 +260,11 @@ export function openSheet(html) {
   return dialog;
 }
 
-export function ask(message, okLabel = 'OK') {
+// Confirm sheet. tone 'danger' (red) for destructive actions, 'primary' for ordinary ones.
+export function ask(message, okLabel = 'OK', tone = 'danger') {
   return new Promise(resolve => {
     const dialog = openSheet(`<p>${esc(message)}</p>
-      <div class="row end"><button class="ghost" data-close>Cancel</button><button class="danger" data-ok>${esc(okLabel)}</button></div>`);
+      <div class="row end"><button class="ghost" data-close>${tone === 'danger' ? 'Cancel' : 'No'}</button><button class="${tone}" data-ok>${esc(okLabel)}</button></div>`);
     dialog.addEventListener('click', e => {
       if (!e.target.closest('[data-ok]')) return;
       resolve(true);

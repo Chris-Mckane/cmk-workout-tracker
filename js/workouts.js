@@ -167,10 +167,13 @@ async function onClick(e) {
       if (state.active && !(await ask('Finish the session in progress and start this one?', 'Start'))) return;
       return go('session', { openId: startSession({ workoutId: id }).id });
     case 'new': draft = { id: null, name: '', exerciseIds: [] }; break;
-    case 'follow':
-      followProgram(btn.closest('[data-program]').dataset.program);
-      tip('Program added: its first workout is your next workout');
+    case 'follow': {
+      const p = PROGRAMS.find(x => x.id === btn.closest('[data-program]').dataset.program);
+      if (!(await ask(`Begin ${p.name} from your next workout?`, 'Yes, begin', 'primary'))) return;
+      followProgram(p.id);
+      tip(`${p.name} begins with your next workout`);
       break;
+    }
     case 'learn': {
       const p = PROGRAMS.find(x => x.id === btn.closest('[data-program]').dataset.program);
       openSheet(`<h2>${esc(p.name)}</h2>${p.guide.map(([title, body]) => `<section class="step"><h3>${esc(title)}</h3><p>${esc(body)}</p></section>`).join('')}
